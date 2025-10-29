@@ -60,6 +60,7 @@ export type FeedQuizItem = {
   createdAt: number;
   likes: number;
   retweets: number;
+  answers: number;
 };
 
 export type FeedQuizBundleItem = {
@@ -69,6 +70,7 @@ export type FeedQuizBundleItem = {
   createdAt: number;
   likes: number;
   retweets: number;
+  answers: number;
 };
 
 export type FeedItem = FeedQuizItem | FeedQuizBundleItem | SharePost;
@@ -117,7 +119,7 @@ const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
 
 // #タグ入力を配列化（#, 空白/カンマ/改行区切り）
 const parseHashtags = (input: string): string[] =>
-  input
+  (input ?? "")
     .split(/[\s,\n]+/)
     .map((s) => s.trim())
     .filter(Boolean)
@@ -329,7 +331,7 @@ const Composer: React.FC<{
     type: QuizType;
     question: string;
     note: string;
-    // tagsInput: string;
+    tagsInput: string;
     correctChoice: string;
     wrongChoices: string[];
     modelAnswer: string;
@@ -338,7 +340,7 @@ const Composer: React.FC<{
     type: "choice",
     question: "",
     note: "",
-    // tagsInput: "",
+    tagsInput: "",
     correctChoice: "",
     wrongChoices: ["", ""],
     modelAnswer: "",
@@ -453,7 +455,7 @@ const Composer: React.FC<{
       type,
       question,
       note,
-      // tagsInput,
+      tagsInput,
       correctChoice,
       wrongChoices,
       modelAnswer,
@@ -1515,10 +1517,11 @@ const QuizRunner: React.FC<{
 const ActionBar: React.FC<{
   likes: number;
   retweets: number;
+  answers?: number;
   onLike: () => void;
   onRT: () => void;
   onAnswer?: () => void; // 追加
-}> = ({ likes, retweets, onLike, onRT, onAnswer }) => (
+}> = ({ likes, retweets, answers, onLike, onRT, onAnswer }) => (
   <div className="flex items-center gap-6 text-sm text-gray-600 pt-2">
     <button onClick={onRT} className="flex items-center gap-1">
       🔁 <span>{retweets}</span>
@@ -1528,8 +1531,7 @@ const ActionBar: React.FC<{
     </button>
     {onAnswer && (
       <button onClick={onAnswer} className="flex items-center gap-1">
-        🅰 
-        {/* <span>nswer</span> */}
+        🅰 <span>{typeof answers === "number" ? answers : ""}</span>
       </button>
     )}
   </div>
@@ -1575,6 +1577,7 @@ export default function QuizApp() {
       createdAt: post.createdAt,
       likes: 0,
       retweets: 0,
+      answers: 0,
     }));
     const mergedFeed = [...catFeed, ...storedFeed];
     setFeed(mergedFeed);
@@ -1600,6 +1603,7 @@ export default function QuizApp() {
         createdAt: post.createdAt,
         likes: 0,
         retweets: 0,
+        answers: 0,
       },
       ...prev,
     ]);
@@ -1625,6 +1629,7 @@ export default function QuizApp() {
       createdAt,
       likes: 0,
       retweets: 0,
+      answers: 0,
     };
     setFeed((prev) => [item, ...prev]);
   };
@@ -1662,6 +1667,16 @@ export default function QuizApp() {
         it.id === id ? { ...it, retweets: (it as any).retweets + 1 } : it
       )
     );
+  const incAnswer = (id: string) =>
+  setFeed((prev) =>
+    prev.map((it) =>
+      // quiz / quizBundle のときだけ加算、share は対象外
+      (it.kind === "quiz" || it.kind === "quizBundle") && it.id === id
+        ? { ...it, answers: (it as any).answers + 1 }
+        : it
+    )
+  );
+
 
   const activeTab = mode;
 
@@ -1705,9 +1720,11 @@ export default function QuizApp() {
                       <ActionBar
                         likes={item.likes}
                         retweets={item.retweets}
+                        answers={item.answers} 
                         onLike={() => incLike(item.id)}
                         onRT={() => incRT(item.id)}
                         onAnswer={() => {
+                          incAnswer(item.id);
                           setAnswerPool([item.data]); // ← この投稿だけをプールに
                           setMode("answer");
                         }}
@@ -1724,9 +1741,11 @@ export default function QuizApp() {
                       <ActionBar
                         likes={item.likes}
                         retweets={item.retweets}
+                        answers={item.answers}
                         onLike={() => incLike(item.id)}
                         onRT={() => incRT(item.id)}
                         onAnswer={() => {
+                          incAnswer(item.id);
                           setAnswerPool(item.data); // ← バンドル全体をプールに
                           setMode("answer");
                         }}
