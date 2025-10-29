@@ -233,7 +233,6 @@ const Header: React.FC = () => (
     </div>
   </div>
 );
-
 const BottomNav: React.FC<{
   active: string;
   onHome: () => void;
@@ -246,44 +245,138 @@ const BottomNav: React.FC<{
     <div className="max-w-md mx-auto grid grid-cols-5 text-xs">
       <button
         onClick={onHome}
-        className={`py-3 ${active === "home" ? "text-black" : "text-gray-500"}`}
+        className={`py-3 flex flex-col items-center ${
+          active === "home" ? "text-black" : "text-gray-500"
+        }`}
         aria-label="ホーム"
       >
-        🏠<div>ホーム</div>
+        <img
+          src="/icons/home.png"
+          alt="ホーム"
+          className={`w-6 h-6 mb-1 ${
+            active === "home" ? "opacity-100" : "opacity-60"
+          }`}
+        />
+        <div>ホーム</div>
       </button>
+
       <button
         onClick={onSearch}
-        className={`py-3 ${
+        className={`py-3 flex flex-col items-center ${
           active === "search" ? "text-black" : "text-gray-500"
         }`}
         aria-label="検索"
       >
-        🔍<div>検索</div>
+        <img
+          src="/icons/search.png"
+          alt="検索"
+          className={`w-6 h-6 mb-1 ${
+            active === "search" ? "opacity-100" : "opacity-60"
+          }`}
+        />
+        <div>検索</div>
       </button>
+
       <button
         onClick={onFolders}
-        className={`py-3 ${
+        className={`py-3 flex flex-col items-center ${
           active === "folders" ? "text-black" : "text-gray-500"
         }`}
         aria-label="クイズ"
       >
-        🗂️<div>クイズ</div>
+        <img
+          src="/icons/quiz.png"
+          alt="クイズ"
+          className={`w-6 h-6 mb-1 ${
+            active === "folders" ? "opacity-100" : "opacity-60"
+          }`}
+        />
+        <div>クイズ</div>
       </button>
+
       <button
         onClick={onNotify}
-        className={`py-3 ${
+        className={`py-3 flex flex-col items-center ${
           active === "notifications" ? "text-black" : "text-gray-500"
         }`}
         aria-label="通知"
       >
-        🔔<div>通知</div>
+        <img
+          src="/icons/bell.png"
+          alt="通知"
+          className={`w-6 h-6 mb-1 ${
+            active === "notifications" ? "opacity-100" : "opacity-60"
+          }`}
+        />
+        <div>通知</div>
       </button>
-      <button onClick={onPost} className="py-3 text-black" aria-label="投稿">
-        ✍️<div>投稿</div>
+
+      <button
+        onClick={onPost}
+        className="py-3 flex flex-col items-center text-black"
+        aria-label="投稿"
+      >
+        <img
+          src="/icons/post.png"
+          alt="投稿"
+          className="w-6 h-6 mb-1"
+        />
+        <div>投稿</div>
       </button>
     </div>
   </nav>
 );
+
+// const BottomNav: React.FC<{
+//   active: string;
+//   onHome: () => void;
+//   onSearch: () => void;
+//   onFolders: () => void;
+//   onNotify: () => void;
+//   onPost: () => void;
+// }> = ({ active, onHome, onSearch, onFolders, onNotify, onPost }) => (
+//   <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-30">
+//     <div className="max-w-md mx-auto grid grid-cols-5 text-xs">
+//       <button
+//         onClick={onHome}
+//         className={`py-3 ${active === "home" ? "text-black" : "text-gray-500"}`}
+//         aria-label="ホーム"
+//       >
+//         🏠<div>ホーム</div>
+//       </button>
+//       <button
+//         onClick={onSearch}
+//         className={`py-3 ${
+//           active === "search" ? "text-black" : "text-gray-500"
+//         }`}
+//         aria-label="検索"
+//       >
+//         🔍<div>検索</div>
+//       </button>
+//       <button
+//         onClick={onFolders}
+//         className={`py-3 ${
+//           active === "folders" ? "text-black" : "text-gray-500"
+//         }`}
+//         aria-label="クイズ"
+//       >
+//         🗂️<div>クイズ</div>
+//       </button>
+//       <button
+//         onClick={onNotify}
+//         className={`py-3 ${
+//           active === "notifications" ? "text-black" : "text-gray-500"
+//         }`}
+//         aria-label="通知"
+//       >
+//         🔔<div>通知</div>
+//       </button>
+//       <button onClick={onPost} className="py-3 text-black" aria-label="投稿">
+//         ✍️<div>投稿</div>
+//       </button>
+//     </div>
+//   </nav>
+// );
 
 const Modal: React.FC<{
   open: boolean;
@@ -313,7 +406,7 @@ const Composer: React.FC<{
   onCancel: () => void;
   onPostBundle?: (posts: QuizPost[]) => void; // 追加：バンドル用
 }> = ({ onPost, onCancel, onPostBundle }) => {
-  const [multi, setMulti] = useState<boolean>(false); // ← まとめて投稿モード
+  const [multi] = useState<boolean>(true);
 
   // 単問 用 state（以前のもの）
   const [type, setType] = useState<QuizType>("choice");
@@ -431,15 +524,7 @@ const Composer: React.FC<{
     }
   };
 
-  // const canPostMulti = useMemo(() => {
-  //   if (!multi) return false;
-  //   if (drafts.length === 0 || drafts.length > 10) return false;
-  //   const posts = drafts.map(toQuizPost).filter(Boolean) as QuizPost[];
-  //   return posts.length === drafts.length; // 全部OK
-  // }, [multi, drafts]);
-  // canPostMulti の定義を置き換え
-  const canPostMulti = useMemo(() => {
-    if (!multi) return false;
+const canPostMulti = useMemo(() => {
     if (drafts.length === 0 || drafts.length > 10) return false;
     const tags = parseHashtags(sharedTags); // 共通タグ必須
     if (tags.length === 0) return false;
@@ -448,7 +533,7 @@ const Composer: React.FC<{
       .map((d) => toQuizPostWithSharedTags(d, sharedTags))
       .filter(Boolean) as QuizPost[];
     return posts.length === drafts.length;
-  }, [multi, drafts, sharedTags]);
+  }, [drafts, sharedTags]);
 
   const submitSingle = () => {
     const p = toQuizPost({
@@ -486,59 +571,16 @@ const Composer: React.FC<{
   // UI
   return (
     <div>
-      {/* モード切替 */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="text-sm text-gray-600">投稿モード</div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setMulti(false)}
-            className={`px-2 py-1 rounded-full border ${
-              !multi ? "bg-black text-white border-black" : "border-gray-300"
-            }`}
-          >
-            単問
-          </button>
-          <button
-            onClick={() => setMulti(true)}
-            className={`px-2 py-1 rounded-full border ${
-              multi ? "bg-black text-white border-black" : "border-gray-300"
-            }`}
-          >
-            まとめて（最大10）
-          </button>
-        </div>
-      </div>
-
-      {!multi ? (
-        /* ==== 単問（従来 + 正解/不正解分離） ==== */
-        <SingleEditor
-          type={type}
-          setType={setType}
-          question={question}
-          setQuestion={setQuestion}
-          note={note}
-          setNote={setNote}
-          tagsInput={tagsInput}
-          setTagsInput={setTagsInput}
-          correctChoice={correctChoice}
-          setCorrectChoice={setCorrectChoice}
-          wrongChoices={wrongChoices}
-          setWrongChoices={setWrongChoices}
-          modelAnswer={modelAnswer}
-          setModelAnswer={setModelAnswer}
-        />
-      ) : (
-        /* ==== 複数（最大10件） ==== */
         <div className="space-y-4">
           {/* 共通タグ入力（全問題に適用） */}
           <div className="mb-2">
             <div className="text-xs font-bold mb-1">
-              共通タグ（全問題に適用）
+              タグ設定
             </div>
             <input
               value={sharedTags}
               onChange={(e) => setSharedTags(e.target.value)}
-              placeholder="#英単語 #歴史 など（カンマ・空白で区切り）"
+              placeholder="#英単語 #歴史 など（カンマ・空白区切り）"
               className="w-full px-3 py-2 bg-gray-50 rounded-xl border border-gray-200"
             />
           </div>
@@ -609,7 +651,6 @@ const Composer: React.FC<{
             )}
           </div>
         </div>
-      )}
 
       {/* ボタン */}
       <div className="flex gap-2 justify-end pt-4">
@@ -619,185 +660,170 @@ const Composer: React.FC<{
         >
           キャンセル
         </button>
-        {!multi ? (
-          <button
-            disabled={!canPostSingle}
-            onClick={submitSingle}
-            className={`px-4 py-2 rounded-full font-bold ${
-              canPostSingle
-                ? "bg-black text-white"
-                : "bg-gray-200 text-gray-400"
-            }`}
-          >
-            投稿
-          </button>
-        ) : (
-          <button
-            disabled={!canPostMulti}
-            onClick={submitMulti}
-            className={`px-4 py-2 rounded-full font-bold ${
-              canPostMulti ? "bg-black text-white" : "bg-gray-200 text-gray-400"
-            }`}
-          >
-            まとめて投稿（{drafts.length}問）
-          </button>
-        )}
+        <button
+          disabled={!canPostMulti}
+          onClick={submitMulti}
+          className={`px-4 py-2 rounded-full font-bold ${
+            canPostMulti ? "bg-black text-white" : "bg-gray-200 text-gray-400"
+          }`}
+        >
+          投稿（{drafts.length}問）
+        </button>
       </div>
     </div>
   );
 };
 
 // 単問エディタ（正解/不正解分離UI）——前回提案の入力UIを小分け化
-const SingleEditor: React.FC<{
-  type: QuizType;
-  setType: (v: QuizType) => void;
-  question: string;
-  setQuestion: (v: string) => void;
-  note: string;
-  setNote: (v: string) => void;
-  tagsInput: string;
-  setTagsInput: (v: string) => void;
-  correctChoice: string;
-  setCorrectChoice: (v: string) => void;
-  wrongChoices: string[];
-  // setWrongChoices: (v: string[]) => void;
-  setWrongChoices: React.Dispatch<React.SetStateAction<string[]>>;
-  modelAnswer: string;
-  setModelAnswer: (v: string) => void;
-}> = (props) => {
-  const {
-    type,
-    setType,
-    question,
-    setQuestion,
-    note,
-    setNote,
-    tagsInput,
-    setTagsInput,
-    correctChoice,
-    setCorrectChoice,
-    wrongChoices,
-    setWrongChoices,
-    modelAnswer,
-    setModelAnswer,
-  } = props;
+// const SingleEditor: React.FC<{
+//   type: QuizType;
+//   setType: (v: QuizType) => void;
+//   question: string;
+//   setQuestion: (v: string) => void;
+//   note: string;
+//   setNote: (v: string) => void;
+//   tagsInput: string;
+//   setTagsInput: (v: string) => void;
+//   correctChoice: string;
+//   setCorrectChoice: (v: string) => void;
+//   wrongChoices: string[];
+//   // setWrongChoices: (v: string[]) => void;
+//   setWrongChoices: React.Dispatch<React.SetStateAction<string[]>>;
+//   modelAnswer: string;
+//   setModelAnswer: (v: string) => void;
+// }> = (props) => {
+//   const {
+//     type,
+//     setType,
+//     question,
+//     setQuestion,
+//     note,
+//     setNote,
+//     tagsInput,
+//     setTagsInput,
+//     correctChoice,
+//     setCorrectChoice,
+//     wrongChoices,
+//     setWrongChoices,
+//     modelAnswer,
+//     setModelAnswer,
+//   } = props;
 
-  // const addWrong = () => setWrongChoices((prev) => [...prev, ""]);
-  // const updateWrong = (i: number, val: string) =>
-  //   setWrongChoices((prev) => prev.map((x, idx) => (idx === i ? val : x)));
-  // const removeWrong = (i: number) =>
-  //   setWrongChoices((prev) => prev.filter((_, idx) => idx !== i));
-  // noImplicitAny でも安心なように引数に型を明示
-  const addWrong = () =>
-    setWrongChoices((prev: string[]) => [...prev, ""]);
-  const updateWrong = (i: number, val: string) =>
-    setWrongChoices((prev: string[]) =>
-      prev.map((x: string, idx: number) => (idx === i ? val : x))
-    );
-  const removeWrong = (i: number) =>
-    setWrongChoices((prev: string[]) =>
-      prev.filter((_: string, idx: number) => idx !== i)
-    );
-  return (
-    <div>
-      <textarea
-        value={question}
-        onChange={(e) => setQuestion(e.target.value)}
-        className="w-full resize-none outline-none placeholder:text-gray-400 text-[16px] min-h-[64px]"
-        placeholder="いま何を出題する？（問題文）"
-      />
+//   // const addWrong = () => setWrongChoices((prev) => [...prev, ""]);
+//   // const updateWrong = (i: number, val: string) =>
+//   //   setWrongChoices((prev) => prev.map((x, idx) => (idx === i ? val : x)));
+//   // const removeWrong = (i: number) =>
+//   //   setWrongChoices((prev) => prev.filter((_, idx) => idx !== i));
+//   // noImplicitAny でも安心なように引数に型を明示
+//   const addWrong = () => setWrongChoices((prev: string[]) => [...prev, ""]);
+//   const updateWrong = (i: number, val: string) =>
+//     setWrongChoices((prev: string[]) =>
+//       prev.map((x: string, idx: number) => (idx === i ? val : x))
+//     );
+//   const removeWrong = (i: number) =>
+//     setWrongChoices((prev: string[]) =>
+//       prev.filter((_: string, idx: number) => idx !== i)
+//     );
+//   return (
+//     <div>
+//       <textarea
+//         value={question}
+//         onChange={(e) => setQuestion(e.target.value)}
+//         className="w-full resize-none outline-none placeholder:text-gray-400 text-[16px] min-h-[64px]"
+//         placeholder="いま何を出題する？（問題文）"
+//       />
 
-      <div className="flex gap-2 text-sm mb-3 mt-2">
-        <button
-          className={`px-2 py-1 rounded-full border ${
-            type === "choice"
-              ? "bg-black text-white border-black"
-              : "border-gray-300"
-          }`}
-          onClick={() => setType("choice")}
-        >
-          選択肢
-        </button>
-        <button
-          className={`px-2 py-1 rounded-full border ${
-            type === "text"
-              ? "bg-black text-white border-black"
-              : "border-gray-300"
-          }`}
-          onClick={() => setType("text")}
-        >
-          テキスト入力
-        </button>
-      </div>
+//       <div className="flex gap-2 text-sm mb-3 mt-2">
+//         <button
+//           className={`px-2 py-1 rounded-full border ${
+//             type === "choice"
+//               ? "bg-black text-white border-black"
+//               : "border-gray-300"
+//           }`}
+//           onClick={() => setType("choice")}
+//         >
+//           選択肢
+//         </button>
+//         <button
+//           className={`px-2 py-1 rounded-full border ${
+//             type === "text"
+//               ? "bg-black text-white border-black"
+//               : "border-gray-300"
+//           }`}
+//           onClick={() => setType("text")}
+//         >
+//           テキスト入力
+//         </button>
+//       </div>
 
-      {type === "choice" ? (
-        <div className="mb-3 space-y-3">
-          <div>
-            <div className="text-xs font-bold text-green-700 mb-1">正解</div>
-            <input
-              value={correctChoice}
-              onChange={(e) => setCorrectChoice(e.target.value)}
-              placeholder="正解の選択肢"
-              className="w-full px-3 py-2 bg-green-50 rounded-xl border border-green-200"
-            />
-          </div>
-          <div>
-            <div className="text-xs font-bold text-gray-700 mb-1">
-              不正解（複数可）
-            </div>
-            {wrongChoices.map((c, i) => (
-              <div key={i} className="flex items-center gap-2 mb-2">
-                <input
-                  value={c}
-                  onChange={(e) => updateWrong(i, e.target.value)}
-                  placeholder={`不正解 ${i + 1}`}
-                  className="flex-1 px-3 py-2 bg-gray-50 rounded-xl border border-gray-200"
-                />
-                {wrongChoices.length > 1 && (
-                  <button
-                    onClick={() => removeWrong(i)}
-                    className="text-gray-500 text-sm"
-                  >
-                    削除
-                  </button>
-                )}
-              </div>
-            ))}
-            <button onClick={addWrong} className="text-blue-600 text-sm">
-              + 不正解を追加
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="mb-3">
-          <input
-            value={modelAnswer}
-            onChange={(e) => setModelAnswer(e.target.value)}
-            placeholder="模範解答（採点の目安）"
-            className="w-full px-3 py-2 bg-gray-50 rounded-xl border border-gray-200"
-          />
-        </div>
-      )}
+//       {type === "choice" ? (
+//         <div className="mb-3 space-y-3">
+//           <div>
+//             <div className="text-xs font-bold text-green-700 mb-1">正解</div>
+//             <input
+//               value={correctChoice}
+//               onChange={(e) => setCorrectChoice(e.target.value)}
+//               placeholder="正解の選択肢"
+//               className="w-full px-3 py-2 bg-green-50 rounded-xl border border-green-200"
+//             />
+//           </div>
+//           <div>
+//             <div className="text-xs font-bold text-gray-700 mb-1">
+//               不正解（複数可）
+//             </div>
+//             {wrongChoices.map((c, i) => (
+//               <div key={i} className="flex items-center gap-2 mb-2">
+//                 <input
+//                   value={c}
+//                   onChange={(e) => updateWrong(i, e.target.value)}
+//                   placeholder={`不正解 ${i + 1}`}
+//                   className="flex-1 px-3 py-2 bg-gray-50 rounded-xl border border-gray-200"
+//                 />
+//                 {wrongChoices.length > 1 && (
+//                   <button
+//                     onClick={() => removeWrong(i)}
+//                     className="text-gray-500 text-sm"
+//                   >
+//                     削除
+//                   </button>
+//                 )}
+//               </div>
+//             ))}
+//             <button onClick={addWrong} className="text-blue-600 text-sm">
+//               + 不正解を追加
+//             </button>
+//           </div>
+//         </div>
+//       ) : (
+//         <div className="mb-3">
+//           <input
+//             value={modelAnswer}
+//             onChange={(e) => setModelAnswer(e.target.value)}
+//             placeholder="模範解答（採点の目安）"
+//             className="w-full px-3 py-2 bg-gray-50 rounded-xl border border-gray-200"
+//           />
+//         </div>
+//       )}
 
-      <div className="mb-2">
-        <input
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          placeholder="補足（任意）"
-          className="w-full px-3 py-2 bg-gray-50 rounded-xl border border-gray-200"
-        />
-      </div>
-      <div className="mb-2">
-        <input
-          value={tagsInput}
-          onChange={(e) => setTagsInput(e.target.value)}
-          placeholder="#タグ（カンマ・空白で区切り）"
-          className="w-full px-3 py-2 bg-gray-50 rounded-xl border border-gray-200"
-        />
-      </div>
-    </div>
-  );
-};
+//       <div className="mb-2">
+//         <input
+//           value={note}
+//           onChange={(e) => setNote(e.target.value)}
+//           placeholder="補足（任意）"
+//           className="w-full px-3 py-2 bg-gray-50 rounded-xl border border-gray-200"
+//         />
+//       </div>
+//       <div className="mb-2">
+//         <input
+//           value={tagsInput}
+//           onChange={(e) => setTagsInput(e.target.value)}
+//           placeholder="#タグ（カンマ・空白で区切り）"
+//           className="w-full px-3 py-2 bg-gray-50 rounded-xl border border-gray-200"
+//         />
+//       </div>
+//     </div>
+//   );
+// };
 
 // 複数問題エディタ
 const MultiEditor: React.FC<{
@@ -1679,15 +1705,14 @@ export default function QuizApp() {
       )
     );
   const incAnswer = (id: string) =>
-  setFeed((prev) =>
-    prev.map((it) =>
-      // quiz / quizBundle のときだけ加算、share は対象外
-      (it.kind === "quiz" || it.kind === "quizBundle") && it.id === id
-        ? { ...it, answers: (it as any).answers + 1 }
-        : it
-    )
-  );
-
+    setFeed((prev) =>
+      prev.map((it) =>
+        // quiz / quizBundle のときだけ加算、share は対象外
+        (it.kind === "quiz" || it.kind === "quizBundle") && it.id === id
+          ? { ...it, answers: (it as any).answers + 1 }
+          : it
+      )
+    );
 
   const activeTab = mode;
 
@@ -1699,7 +1724,8 @@ export default function QuizApp() {
         {/* HOME */}
         {mode === "home" && (
           <Card>
-            <SectionTitle title="ホーム" />
+            {/* ホーム */}
+            <SectionTitle title="" />
             <div className="px-4 pb-4">
               {feed.length === 0 && (
                 <div className="text-gray-500 text-sm">
@@ -1731,7 +1757,7 @@ export default function QuizApp() {
                       <ActionBar
                         likes={item.likes}
                         retweets={item.retweets}
-                        answers={item.answers} 
+                        answers={item.answers}
                         onLike={() => incLike(item.id)}
                         onRT={() => incRT(item.id)}
                         onAnswer={() => {
