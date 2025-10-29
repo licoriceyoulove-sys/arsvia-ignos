@@ -1,0 +1,18 @@
+[
+  {
+    "question": "apple の意味は？",
+    "type": "choice",
+    "choices": ["りんご", "バナナ", "みかん", "ぶどう"],
+    "correctIndex": 0,
+    "modelAnswer": "",
+    "note": "英単語の基礎",
+    "hashtags": ["#英単語", "#基礎"]
+  },
+  {
+    "question": "Republic of Korea の略は？",
+    "type": "text",
+    "modelAnswer": "ROK",
+    "note": "",
+    "hashtags": ["#地理"]
+  }
+]
