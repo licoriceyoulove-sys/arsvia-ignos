@@ -660,7 +660,8 @@ const SingleEditor: React.FC<{
   correctChoice: string;
   setCorrectChoice: (v: string) => void;
   wrongChoices: string[];
-  setWrongChoices: (v: string[]) => void;
+  // setWrongChoices: (v: string[]) => void;
+  setWrongChoices: React.Dispatch<React.SetStateAction<string[]>>;
   modelAnswer: string;
   setModelAnswer: (v: string) => void;
 }> = (props) => {
@@ -681,12 +682,22 @@ const SingleEditor: React.FC<{
     setModelAnswer,
   } = props;
 
-  const addWrong = () => setWrongChoices((prev) => [...prev, ""]);
+  // const addWrong = () => setWrongChoices((prev) => [...prev, ""]);
+  // const updateWrong = (i: number, val: string) =>
+  //   setWrongChoices((prev) => prev.map((x, idx) => (idx === i ? val : x)));
+  // const removeWrong = (i: number) =>
+  //   setWrongChoices((prev) => prev.filter((_, idx) => idx !== i));
+  // noImplicitAny でも安心なように引数に型を明示
+  const addWrong = () =>
+    setWrongChoices((prev: string[]) => [...prev, ""]);
   const updateWrong = (i: number, val: string) =>
-    setWrongChoices((prev) => prev.map((x, idx) => (idx === i ? val : x)));
+    setWrongChoices((prev: string[]) =>
+      prev.map((x: string, idx: number) => (idx === i ? val : x))
+    );
   const removeWrong = (i: number) =>
-    setWrongChoices((prev) => prev.filter((_, idx) => idx !== i));
-
+    setWrongChoices((prev: string[]) =>
+      prev.filter((_: string, idx: number) => idx !== i)
+    );
   return (
     <div>
       <textarea
@@ -1828,14 +1839,6 @@ export default function QuizApp() {
         <div className="h-4" />
       </div>
 
-      {/* 投稿モーダル */}
-      {/* <Modal
-        open={composerOpen}
-        onClose={() => setComposerOpen(false)}
-        title="投稿"
-      >
-        <Composer onPost={addPost} onCancel={() => setComposerOpen(false)} />
-      </Modal> */}
       {/* 投稿モーダル */}
       <Modal
         open={composerOpen}
