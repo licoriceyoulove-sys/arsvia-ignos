@@ -225,9 +225,9 @@ const Header: React.FC = () => (
     <div className="max-w-md mx-auto flex items-center justify-between px-4 h-12">
       <div className="flex items-center gap-3">
         <div className="w-8 h-8 rounded-full bg-black flex items-center justify-center text-white font-bold">
-          X
+          〘〙
         </div>
-        <div className="font-bold">SPHINX</div>
+        <div className="font-bold">Ignos</div>
       </div>
       <div className="w-8" />
     </div>
@@ -402,20 +402,19 @@ const Modal: React.FC<{
 };
 
 const Composer: React.FC<{
-  onPost: (post: QuizPost) => void; // 単問用（従来）
   onCancel: () => void;
   onPostBundle?: (posts: QuizPost[]) => void; // 追加：バンドル用
-}> = ({ onPost, onCancel, onPostBundle }) => {
-  const [multi] = useState<boolean>(true);
+}> = ({ onCancel, onPostBundle }) => {
+  // const [multi] = useState<boolean>(true);
 
-  // 単問 用 state（以前のもの）
-  const [type, setType] = useState<QuizType>("choice");
-  const [question, setQuestion] = useState("");
-  const [note, setNote] = useState("");
-  const [tagsInput, setTagsInput] = useState("");
-  const [correctChoice, setCorrectChoice] = useState<string>("");
-  const [wrongChoices, setWrongChoices] = useState<string[]>(["", ""]);
-  const [modelAnswer, setModelAnswer] = useState("");
+  // // 単問 用 state（以前のもの）
+  // const [type, setType] = useState<QuizType>("choice");
+  // const [question, setQuestion] = useState("");
+  // const [note, setNote] = useState("");
+  // const [tagsInput, setTagsInput] = useState("");
+  // const [correctChoice, setCorrectChoice] = useState<string>("");
+  // const [wrongChoices, setWrongChoices] = useState<string[]>(["", ""]);
+  // const [modelAnswer, setModelAnswer] = useState("");
   const [sharedTags, setSharedTags] = useState<string>(""); // 共通タグ（全問題に適用）
   const [activeIdx, setActiveIdx] = useState<number>(0); // 表示中の問題インデックス
 
@@ -440,52 +439,52 @@ const Composer: React.FC<{
   });
   const [drafts, setDrafts] = useState<Draft[]>([makeEmptyDraft()]);
 
-  const toQuizPost = (d: Draft): QuizPost | null => {
-    if (!d.question.trim()) return null;
-    const tags = parseHashtags(d.tagsInput);
-    if (tags.length === 0) return null;
+  // const toQuizPost = (d: Draft): QuizPost | null => {
+  //   if (!d.question.trim()) return null;
+  //   const tags = parseHashtags(d.tagsInput);
+  //   if (tags.length === 0) return null;
 
-    if (d.type === "choice") {
-      const correctOk = d.correctChoice.trim().length > 0;
-      const wrongFilled = d.wrongChoices.map((s) => s.trim()).filter(Boolean);
-      if (!correctOk || wrongFilled.length < 1) return null;
-      return {
-        id: uid(),
-        question: d.question.trim(),
-        type: "choice",
-        choices: [d.correctChoice.trim(), ...wrongFilled],
-        correctIndex: 0,
-        note: d.note.trim() || undefined,
-        hashtags: tags,
-        createdAt: Date.now(),
-      };
-    } else {
-      if (!d.modelAnswer.trim()) return null;
-      return {
-        id: uid(),
-        question: d.question.trim(),
-        type: "text",
-        modelAnswer: d.modelAnswer.trim(),
-        note: d.note.trim() || undefined,
-        hashtags: tags,
-        createdAt: Date.now(),
-      };
-    }
-  };
+  //   if (d.type === "choice") {
+  //     const correctOk = d.correctChoice.trim().length > 0;
+  //     const wrongFilled = d.wrongChoices.map((s) => s.trim()).filter(Boolean);
+  //     if (!correctOk || wrongFilled.length < 1) return null;
+  //     return {
+  //       id: uid(),
+  //       question: d.question.trim(),
+  //       type: "choice",
+  //       choices: [d.correctChoice.trim(), ...wrongFilled],
+  //       correctIndex: 0,
+  //       note: d.note.trim() || undefined,
+  //       hashtags: tags,
+  //       createdAt: Date.now(),
+  //     };
+  //   } else {
+  //     if (!d.modelAnswer.trim()) return null;
+  //     return {
+  //       id: uid(),
+  //       question: d.question.trim(),
+  //       type: "text",
+  //       modelAnswer: d.modelAnswer.trim(),
+  //       note: d.note.trim() || undefined,
+  //       hashtags: tags,
+  //       createdAt: Date.now(),
+  //     };
+  //   }
+  // };
 
-  const canPostSingle = useMemo(
-    () =>
-      !!toQuizPost({
-        type,
-        question,
-        note,
-        tagsInput,
-        correctChoice,
-        wrongChoices,
-        modelAnswer,
-      }),
-    [type, question, note, tagsInput, correctChoice, wrongChoices, modelAnswer]
-  );
+  // const canPostSingle = useMemo(
+  //   () =>
+  //     !!toQuizPost({
+  //       type,
+  //       question,
+  //       note,
+  //       tagsInput,
+  //       correctChoice,
+  //       wrongChoices,
+  //       modelAnswer,
+  //     }),
+  //   [type, question, note, tagsInput, correctChoice, wrongChoices, modelAnswer]
+  // );
 
   // 複数用の Post 化関数（共通タグを使う）
   const toQuizPostWithSharedTags = (
@@ -535,20 +534,20 @@ const canPostMulti = useMemo(() => {
     return posts.length === drafts.length;
   }, [drafts, sharedTags]);
 
-  const submitSingle = () => {
-    const p = toQuizPost({
-      type,
-      question,
-      note,
-      tagsInput,
-      correctChoice,
-      wrongChoices,
-      modelAnswer,
-    });
-    if (!p) return;
-    onPost(p);
-    onCancel();
-  };
+  // const submitSingle = () => {
+  //   const p = toQuizPost({
+  //     type,
+  //     question,
+  //     note,
+  //     tagsInput,
+  //     correctChoice,
+  //     wrongChoices,
+  //     modelAnswer,
+  //   });
+  //   if (!p) return;
+  //   onPost(p);
+  //   onCancel();
+  // };
 
   // const submitMulti = () => {
   //   if (!onPostBundle) return;
@@ -1630,21 +1629,21 @@ export default function QuizApp() {
   useEffect(() => savePosts(posts), [posts]);
   useEffect(() => saveFeed(feed), [feed]);
 
-  const addPost = (post: QuizPost) => {
-    setPosts((prev) => [post, ...prev]);
-    setFeed((prev) => [
-      {
-        id: post.id,
-        kind: "quiz",
-        data: post,
-        createdAt: post.createdAt,
-        likes: 0,
-        retweets: 0,
-        answers: 0,
-      },
-      ...prev,
-    ]);
-  };
+  // const addPost = (post: QuizPost) => {
+  //   setPosts((prev) => [post, ...prev]);
+  //   setFeed((prev) => [
+  //     {
+  //       id: post.id,
+  //       kind: "quiz",
+  //       data: post,
+  //       createdAt: post.createdAt,
+  //       likes: 0,
+  //       retweets: 0,
+  //       answers: 0,
+  //     },
+  //     ...prev,
+  //   ]);
+  // };
 
   const startQuiz = (tag: string) => {
     setSelectedTag(tag);
@@ -1872,7 +1871,7 @@ export default function QuizApp() {
         title="投稿"
       >
         <Composer
-          onPost={addPost} // 単問
+          // onPost={addPost} // 単問
           onPostBundle={addPostBundle} // 複数
           onCancel={() => setComposerOpen(false)}
         />
