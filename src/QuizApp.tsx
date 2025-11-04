@@ -1,4 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
+// 例: src/QuizApp.tsx の先頭付近
+import { getQuizzes } from "./api/client";
+import { fromQuizRow } from "./api/mapper";
+import { bulkUpsertQuizzes, postFeed, patchFeed } from "./api/client";
+import { toQuizRow, toFeedRow } from "./api/mapper";
 
 /**
  * スマホ向け・X（旧Twitter）風UIの個人用クイズアプリ（完全版）
@@ -225,7 +230,7 @@ const Header: React.FC = () => (
     <div className="max-w-md mx-auto flex items-center justify-between px-4 h-12">
       <div className="flex items-center gap-3">
         <div className="w-8 h-8 rounded-full bg-black flex items-center justify-center text-white font-bold">
-          〘〙
+          I
         </div>
         <div className="font-bold">Ignos</div>
       </div>
@@ -233,6 +238,9 @@ const Header: React.FC = () => (
     </div>
   </div>
 );
+const iconUrl = (name: string) =>
+  `${import.meta.env.BASE_URL}icons/${name}.png`;
+
 const BottomNav: React.FC<{
   active: string;
   onHome: () => void;
@@ -251,7 +259,7 @@ const BottomNav: React.FC<{
         aria-label="ホーム"
       >
         <img
-          src="/icons/home.png"
+          src={iconUrl("home")}
           alt="ホーム"
           className={`w-6 h-6 mb-1 ${
             active === "home" ? "opacity-100" : "opacity-60"
@@ -268,7 +276,7 @@ const BottomNav: React.FC<{
         aria-label="検索"
       >
         <img
-          src="/icons/search.png"
+          src={iconUrl("search")}
           alt="検索"
           className={`w-6 h-6 mb-1 ${
             active === "search" ? "opacity-100" : "opacity-60"
@@ -285,7 +293,7 @@ const BottomNav: React.FC<{
         aria-label="クイズ"
       >
         <img
-          src="/icons/quiz.png"
+          src={iconUrl("quiz")}
           alt="クイズ"
           className={`w-6 h-6 mb-1 ${
             active === "folders" ? "opacity-100" : "opacity-60"
@@ -302,7 +310,7 @@ const BottomNav: React.FC<{
         aria-label="通知"
       >
         <img
-          src="/icons/bell.png"
+          src={iconUrl("bell")}
           alt="通知"
           className={`w-6 h-6 mb-1 ${
             active === "notifications" ? "opacity-100" : "opacity-60"
@@ -316,11 +324,7 @@ const BottomNav: React.FC<{
         className="py-3 flex flex-col items-center text-black"
         aria-label="投稿"
       >
-        <img
-          src="/icons/post.png"
-          alt="投稿"
-          className="w-6 h-6 mb-1"
-        />
+        <img src={iconUrl("post")} alt="投稿" className="w-6 h-6 mb-1" />
         <div>投稿</div>
       </button>
     </div>
@@ -523,7 +527,7 @@ const Composer: React.FC<{
     }
   };
 
-const canPostMulti = useMemo(() => {
+  const canPostMulti = useMemo(() => {
     if (drafts.length === 0 || drafts.length > 10) return false;
     const tags = parseHashtags(sharedTags); // 共通タグ必須
     if (tags.length === 0) return false;
@@ -570,86 +574,79 @@ const canPostMulti = useMemo(() => {
   // UI
   return (
     <div>
-        <div className="space-y-4">
-          {/* 共通タグ入力（全問題に適用） */}
-          <div className="mb-2">
-            <div className="text-xs font-bold mb-1">
-              タグ設定
-            </div>
-            <input
-              value={sharedTags}
-              onChange={(e) => setSharedTags(e.target.value)}
-              placeholder="#英単語 #歴史 など（カンマ・空白区切り）"
-              className="w-full px-3 py-2 bg-gray-50 rounded-xl border border-gray-200"
-            />
-          </div>
+      <div className="space-y-4">
+        {/* 共通タグ入力（全問題に適用） */}
+        <div className="mb-2">
+          <div className="text-xs font-bold mb-1">タグ設定</div>
+          <input
+            value={sharedTags}
+            onChange={(e) => setSharedTags(e.target.value)}
+            placeholder="#英単語 #歴史 など（カンマ・空白区切り）"
+            className="w-full px-3 py-2 bg-gray-50 rounded-xl border border-gray-200"
+          />
+        </div>
 
-          {/* ナビゲーション（＜ 問題 x/y ＞） */}
-          <div className="flex items-center justify-between">
-            <button
-              onClick={() => setActiveIdx((i) => Math.max(0, i - 1))}
-              className="px-3 py-1 rounded-full border"
-              disabled={activeIdx === 0}
-              aria-label="前の問題"
-            >
-              ＜
-            </button>
-            <div className="text-sm">
-              問題 {activeIdx + 1} / {drafts.length}
-            </div>
+        {/* ナビゲーション（＜ 問題 x/y ＞） */}
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => setActiveIdx((i) => Math.max(0, i - 1))}
+            className="px-3 py-1 rounded-full border"
+            disabled={activeIdx === 0}
+            aria-label="前の問題"
+          >
+            ＜
+          </button>
+          <div className="text-sm">
+            問題 {activeIdx + 1} / {drafts.length}
+          </div>
+          <button
+            onClick={() =>
+              setActiveIdx((i) => Math.min(drafts.length - 1, i + 1))
+            }
+            className="px-3 py-1 rounded-full border"
+            disabled={activeIdx === drafts.length - 1}
+            aria-label="次の問題"
+          >
+            ＞
+          </button>
+        </div>
+
+        {/* 表示中の1問だけ編集 */}
+        <MultiEditor
+          index={activeIdx + 1}
+          draft={drafts[activeIdx]}
+          onChange={(nd) =>
+            setDrafts((prev) => prev.map((x, i) => (i === activeIdx ? nd : x)))
+          }
+          onRemove={() => {
+            setDrafts((prev) => {
+              const next = prev.filter((_, i) => i !== activeIdx);
+              const nextIdx = Math.max(0, Math.min(activeIdx, next.length - 1));
+              setActiveIdx(nextIdx);
+              return next.length ? next : [makeEmptyDraft()];
+            });
+          }}
+          removable={drafts.length > 1}
+        />
+
+        {/* 追加ボタン（追加後は新規問題がアクティブに） */}
+        <div>
+          {drafts.length < 10 && (
             <button
               onClick={() =>
-                setActiveIdx((i) => Math.min(drafts.length - 1, i + 1))
+                setDrafts((prev) => {
+                  const next = [...prev, makeEmptyDraft()];
+                  setActiveIdx(next.length - 1);
+                  return next;
+                })
               }
-              className="px-3 py-1 rounded-full border"
-              disabled={activeIdx === drafts.length - 1}
-              aria-label="次の問題"
+              className="text-blue-600 text-sm"
             >
-              ＞
+              + 問題を追加
             </button>
-          </div>
-
-          {/* 表示中の1問だけ編集 */}
-          <MultiEditor
-            index={activeIdx + 1}
-            draft={drafts[activeIdx]}
-            onChange={(nd) =>
-              setDrafts((prev) =>
-                prev.map((x, i) => (i === activeIdx ? nd : x))
-              )
-            }
-            onRemove={() => {
-              setDrafts((prev) => {
-                const next = prev.filter((_, i) => i !== activeIdx);
-                const nextIdx = Math.max(
-                  0,
-                  Math.min(activeIdx, next.length - 1)
-                );
-                setActiveIdx(nextIdx);
-                return next.length ? next : [makeEmptyDraft()];
-              });
-            }}
-            removable={drafts.length > 1}
-          />
-
-          {/* 追加ボタン（追加後は新規問題がアクティブに） */}
-          <div>
-            {drafts.length < 10 && (
-              <button
-                onClick={() =>
-                  setDrafts((prev) => {
-                    const next = [...prev, makeEmptyDraft()];
-                    setActiveIdx(next.length - 1);
-                    return next;
-                  })
-                }
-                className="text-blue-600 text-sm"
-              >
-                + 問題を追加
-              </button>
-            )}
-          </div>
+          )}
         </div>
+      </div>
 
       {/* ボタン */}
       <div className="flex gap-2 justify-end pt-4">
@@ -1595,16 +1592,26 @@ export default function QuizApp() {
   const [shareTag, setShareTag] = useState<string>("");
   const [shareMessage, setShareMessage] = useState<string>("");
 
-  // 初期化：カテゴリJSONを未投入分だけ追加し、既存の保存データとマージ
+  // どこかのコンポーネント内（例えば QuizApp の中）
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await getQuizzes();
+        console.log("API /quizzes ->", data); // ← ここに test1 などが出ればOK
+      } catch (e) {
+        console.error(e);
+      }
+    })();
+  }, []);
+
+  // ① 既存シード＋ローカル読み込み（保存はしない）
   useEffect(() => {
     const storedPosts = loadPosts();
     const storedFeed = loadFeed();
 
     const { posts: catPosts, newlySeededKeys } = loadCategorySeedsAsPosts();
-
     const mergedPosts = [...catPosts, ...storedPosts];
     setPosts(mergedPosts);
-    savePosts(mergedPosts);
 
     const catFeed: FeedItem[] = catPosts.map((post) => ({
       id: post.id,
@@ -1617,7 +1624,6 @@ export default function QuizApp() {
     }));
     const mergedFeed = [...catFeed, ...storedFeed];
     setFeed(mergedFeed);
-    saveFeed(mergedFeed);
 
     if (newlySeededKeys.length > 0) {
       const prev = loadSeededCats();
@@ -1626,6 +1632,48 @@ export default function QuizApp() {
     }
   }, []);
 
+  // ② APIから取得して重複なしでマージ
+  useEffect(() => {
+    const ac = new AbortController();
+    (async () => {
+      try {
+        // const rows = await getQuizzes(); // signal付与できる実装なら渡す
+        // if (ac.signal.aborted) return;
+
+        // const apiPosts = rows.map(fromQuizRow);
+        const rows = await getQuizzes();
+        // ここを明示的に型付け
+        const apiPosts: QuizPost[] = rows.map(fromQuizRow);
+        setPosts((prev) => {
+          const seen = new Set(prev.map((p) => p.id));
+          const merged = [...prev];
+          for (const p of apiPosts) if (!seen.has(p.id)) merged.push(p);
+          return merged;
+        });
+
+        setFeed((prev) => {
+          const have = new Set(prev.map((f) => f.id));
+          const add = apiPosts
+            .filter((p) => !have.has(p.id))
+            .map((p) => ({
+              id: p.id,
+              kind: "quiz" as const,
+              data: p,
+              createdAt: p.createdAt,
+              likes: 0,
+              retweets: 0,
+              answers: 0,
+            }));
+          return add.length ? [...add, ...prev] : prev;
+        });
+      } catch (e) {
+        console.error("API init failed", e);
+      }
+    })();
+    return () => ac.abort();
+  }, []);
+
+  // ③ 変更があったらローカルへ保存（この2本だけでOK）
   useEffect(() => savePosts(posts), [posts]);
   useEffect(() => saveFeed(feed), [feed]);
 
@@ -1668,6 +1716,9 @@ export default function QuizApp() {
       answers: 0,
     };
     setFeed((prev) => [item, ...prev]);
+    // 2) APIへ fire-and-forget 保存（失敗は無視）
+    bulkUpsertQuizzes(bundle.map(toQuizRow)).catch(() => {});
+    postFeed(toFeedRow(item as any)).catch(() => {});
   };
 
   // 共有フロー
@@ -1689,29 +1740,38 @@ export default function QuizApp() {
     setFeed((prev) => [item, ...prev]);
     setShareOpen(false);
     setMode("home");
+
+    postFeed(toFeedRow(item as any)).catch(() => {});
   };
 
-  const incLike = (id: string) =>
+  const incLike = (id: string) => {
     setFeed((prev) =>
       prev.map((it) =>
         it.id === id ? { ...it, likes: (it as any).likes + 1 } : it
       )
     );
-  const incRT = (id: string) =>
+    patchFeed(id, "likes").catch(() => {}); // ← 変更
+  };
+
+  const incRT = (id: string) => {
     setFeed((prev) =>
       prev.map((it) =>
         it.id === id ? { ...it, retweets: (it as any).retweets + 1 } : it
       )
     );
-  const incAnswer = (id: string) =>
+    patchFeed(id, "retweets").catch(() => {}); // ← 変更
+  };
+
+  const incAnswer = (id: string) => {
     setFeed((prev) =>
       prev.map((it) =>
-        // quiz / quizBundle のときだけ加算、share は対象外
         (it.kind === "quiz" || it.kind === "quizBundle") && it.id === id
           ? { ...it, answers: (it as any).answers + 1 }
           : it
       )
     );
+    patchFeed(id, "answers").catch(() => {}); // ← 変更
+  };
 
   const activeTab = mode;
 
