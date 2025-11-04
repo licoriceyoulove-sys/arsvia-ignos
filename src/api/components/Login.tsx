@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { login } from "../api/auth";
+import { login } from "../auth";
 
 type Props = {
   onSuccess: (user: { id: string; name: string }) => void;

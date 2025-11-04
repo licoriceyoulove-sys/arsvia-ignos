@@ -670,157 +670,6 @@ const Composer: React.FC<{
   );
 };
 
-// 単問エディタ（正解/不正解分離UI）——前回提案の入力UIを小分け化
-// const SingleEditor: React.FC<{
-//   type: QuizType;
-//   setType: (v: QuizType) => void;
-//   question: string;
-//   setQuestion: (v: string) => void;
-//   note: string;
-//   setNote: (v: string) => void;
-//   tagsInput: string;
-//   setTagsInput: (v: string) => void;
-//   correctChoice: string;
-//   setCorrectChoice: (v: string) => void;
-//   wrongChoices: string[];
-//   // setWrongChoices: (v: string[]) => void;
-//   setWrongChoices: React.Dispatch<React.SetStateAction<string[]>>;
-//   modelAnswer: string;
-//   setModelAnswer: (v: string) => void;
-// }> = (props) => {
-//   const {
-//     type,
-//     setType,
-//     question,
-//     setQuestion,
-//     note,
-//     setNote,
-//     tagsInput,
-//     setTagsInput,
-//     correctChoice,
-//     setCorrectChoice,
-//     wrongChoices,
-//     setWrongChoices,
-//     modelAnswer,
-//     setModelAnswer,
-//   } = props;
-
-//   // const addWrong = () => setWrongChoices((prev) => [...prev, ""]);
-//   // const updateWrong = (i: number, val: string) =>
-//   //   setWrongChoices((prev) => prev.map((x, idx) => (idx === i ? val : x)));
-//   // const removeWrong = (i: number) =>
-//   //   setWrongChoices((prev) => prev.filter((_, idx) => idx !== i));
-//   // noImplicitAny でも安心なように引数に型を明示
-//   const addWrong = () => setWrongChoices((prev: string[]) => [...prev, ""]);
-//   const updateWrong = (i: number, val: string) =>
-//     setWrongChoices((prev: string[]) =>
-//       prev.map((x: string, idx: number) => (idx === i ? val : x))
-//     );
-//   const removeWrong = (i: number) =>
-//     setWrongChoices((prev: string[]) =>
-//       prev.filter((_: string, idx: number) => idx !== i)
-//     );
-//   return (
-//     <div>
-//       <textarea
-//         value={question}
-//         onChange={(e) => setQuestion(e.target.value)}
-//         className="w-full resize-none outline-none placeholder:text-gray-400 text-[16px] min-h-[64px]"
-//         placeholder="いま何を出題する？（問題文）"
-//       />
-
-//       <div className="flex gap-2 text-sm mb-3 mt-2">
-//         <button
-//           className={`px-2 py-1 rounded-full border ${
-//             type === "choice"
-//               ? "bg-black text-white border-black"
-//               : "border-gray-300"
-//           }`}
-//           onClick={() => setType("choice")}
-//         >
-//           選択肢
-//         </button>
-//         <button
-//           className={`px-2 py-1 rounded-full border ${
-//             type === "text"
-//               ? "bg-black text-white border-black"
-//               : "border-gray-300"
-//           }`}
-//           onClick={() => setType("text")}
-//         >
-//           テキスト入力
-//         </button>
-//       </div>
-
-//       {type === "choice" ? (
-//         <div className="mb-3 space-y-3">
-//           <div>
-//             <div className="text-xs font-bold text-green-700 mb-1">正解</div>
-//             <input
-//               value={correctChoice}
-//               onChange={(e) => setCorrectChoice(e.target.value)}
-//               placeholder="正解の選択肢"
-//               className="w-full px-3 py-2 bg-green-50 rounded-xl border border-green-200"
-//             />
-//           </div>
-//           <div>
-//             <div className="text-xs font-bold text-gray-700 mb-1">
-//               不正解（複数可）
-//             </div>
-//             {wrongChoices.map((c, i) => (
-//               <div key={i} className="flex items-center gap-2 mb-2">
-//                 <input
-//                   value={c}
-//                   onChange={(e) => updateWrong(i, e.target.value)}
-//                   placeholder={`不正解 ${i + 1}`}
-//                   className="flex-1 px-3 py-2 bg-gray-50 rounded-xl border border-gray-200"
-//                 />
-//                 {wrongChoices.length > 1 && (
-//                   <button
-//                     onClick={() => removeWrong(i)}
-//                     className="text-gray-500 text-sm"
-//                   >
-//                     削除
-//                   </button>
-//                 )}
-//               </div>
-//             ))}
-//             <button onClick={addWrong} className="text-blue-600 text-sm">
-//               + 不正解を追加
-//             </button>
-//           </div>
-//         </div>
-//       ) : (
-//         <div className="mb-3">
-//           <input
-//             value={modelAnswer}
-//             onChange={(e) => setModelAnswer(e.target.value)}
-//             placeholder="模範解答（採点の目安）"
-//             className="w-full px-3 py-2 bg-gray-50 rounded-xl border border-gray-200"
-//           />
-//         </div>
-//       )}
-
-//       <div className="mb-2">
-//         <input
-//           value={note}
-//           onChange={(e) => setNote(e.target.value)}
-//           placeholder="補足（任意）"
-//           className="w-full px-3 py-2 bg-gray-50 rounded-xl border border-gray-200"
-//         />
-//       </div>
-//       <div className="mb-2">
-//         <input
-//           value={tagsInput}
-//           onChange={(e) => setTagsInput(e.target.value)}
-//           placeholder="#タグ（カンマ・空白で区切り）"
-//           className="w-full px-3 py-2 bg-gray-50 rounded-xl border border-gray-200"
-//         />
-//       </div>
-//     </div>
-//   );
-// };
-
 // 複数問題エディタ
 const MultiEditor: React.FC<{
   index: number;
@@ -943,14 +792,6 @@ const MultiEditor: React.FC<{
           className="w-full px-3 py-2 bg-gray-50 rounded-xl border border-gray-200"
         />
       </div>
-      {/* <div className="mb-2">
-        <input
-          value={draft.tagsInput}
-          onChange={(e) => set({ tagsInput: e.target.value })}
-          placeholder="#タグ（カンマ・空白で区切り）"
-          className="w-full px-3 py-2 bg-gray-50 rounded-xl border border-gray-200"
-        />
-      </div> */}
     </div>
   );
 };
@@ -1531,22 +1372,6 @@ const QuizRunner: React.FC<{
 /* =========================
    タイムラインのアクション
 ========================= */
-// const ActionBar: React.FC<{
-//   likes: number;
-//   retweets: number;
-//   onLike: () => void;
-//   onRT: () => void;
-// }> = ({ likes, retweets, onLike, onRT }) => (
-//   <div className="flex items-center gap-6 text-sm text-gray-600 pt-2">
-//     <button onClick={onRT} className="flex items-center gap-1">
-//       🔁 <span>{retweets}</span>
-//     </button>
-//     <button onClick={onLike} className="flex items-center gap-1">
-//       ⭐ <span>{likes}</span>
-//     </button>
-//   </div>
-// );
-// 置き換え
 const ActionBar: React.FC<{
   likes: number;
   retweets: number;
@@ -1576,9 +1401,7 @@ const ActionBar: React.FC<{
 export default function QuizApp() {
   const [posts, setPosts] = useState<QuizPost[]>([]);
   const [feed, setFeed] = useState<FeedItem[]>([]);
-  // const [mode, setMode] = useState<
-  //   "home" | "folders" | "quiz" | "search" | "notifications"
-  // >("home");
+
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [composerOpen, setComposerOpen] = useState(false);
 
@@ -1586,11 +1409,79 @@ export default function QuizApp() {
     "home" | "folders" | "quiz" | "search" | "notifications" | "answer"
   >("home");
   const [answerPool, setAnswerPool] = useState<QuizPost[] | null>(null);
-
+  const [hasApiData, setHasApiData] = useState(false);
   // 共有モーダル
   const [shareOpen, setShareOpen] = useState(false);
   const [shareTag, setShareTag] = useState<string>("");
   const [shareMessage, setShareMessage] = useState<string>("");
+
+  useEffect(() => {
+    const ac = new AbortController();
+    (async () => {
+      try {
+        const rows = await getQuizzes();
+        const apiPosts: QuizPost[] = rows.map(fromQuizRow);
+
+        // ★ APIにデータがあればフラグON
+        if (apiPosts.length > 0) setHasApiData(true);
+
+        setPosts((prev) => {
+          const seen = new Set(prev.map((p) => p.id));
+          const merged = [...prev];
+          for (const p of apiPosts) if (!seen.has(p.id)) merged.push(p);
+          return merged;
+        });
+
+        setFeed((prev) => {
+          const have = new Set(prev.map((f) => f.id));
+          const add = apiPosts
+            .filter((p) => !have.has(p.id))
+            .map((p) => ({
+              id: p.id,
+              kind: "quiz" as const,
+              data: p,
+              createdAt: p.createdAt,
+              likes: 0,
+              retweets: 0,
+              answers: 0,
+            }));
+          return add.length ? [...add, ...prev] : prev;
+        });
+      } catch (e) {
+        console.error("API init failed", e);
+      }
+    })();
+    return () => ac.abort();
+  }, []);
+
+  useEffect(() => {
+    if (hasApiData) return; // ★ APIを優先。データがあるならローカル注入しない
+
+    const storedPosts = loadPosts();
+    const storedFeed = loadFeed();
+
+    const { posts: catPosts, newlySeededKeys } = loadCategorySeedsAsPosts();
+    const mergedPosts = [...catPosts, ...storedPosts];
+    setPosts(mergedPosts);
+
+    const catFeed: FeedItem[] = catPosts.map((post) => ({
+      id: post.id,
+      kind: "quiz",
+      data: post,
+      createdAt: post.createdAt,
+      likes: 0,
+      retweets: 0,
+      answers: 0,
+    }));
+    const mergedFeed = [...catFeed, ...storedFeed];
+    setFeed(mergedFeed);
+
+    if (newlySeededKeys.length > 0) {
+      const prev = loadSeededCats();
+      const next = Array.from(new Set([...prev, ...newlySeededKeys]));
+      saveSeededCats(next);
+    }
+  }, [hasApiData]); // ★ 依存に追加
 
   // どこかのコンポーネント内（例えば QuizApp の中）
   useEffect(() => {
@@ -1676,22 +1567,6 @@ export default function QuizApp() {
   // ③ 変更があったらローカルへ保存（この2本だけでOK）
   useEffect(() => savePosts(posts), [posts]);
   useEffect(() => saveFeed(feed), [feed]);
-
-  // const addPost = (post: QuizPost) => {
-  //   setPosts((prev) => [post, ...prev]);
-  //   setFeed((prev) => [
-  //     {
-  //       id: post.id,
-  //       kind: "quiz",
-  //       data: post,
-  //       createdAt: post.createdAt,
-  //       likes: 0,
-  //       retweets: 0,
-  //       answers: 0,
-  //     },
-  //     ...prev,
-  //   ]);
-  // };
 
   const startQuiz = (tag: string) => {
     setSelectedTag(tag);
