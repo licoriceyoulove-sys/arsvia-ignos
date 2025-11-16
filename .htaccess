@@ -1,0 +1,19 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # すでに存在するファイルやディレクトリはそのまま表示
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
+
+    # それ以外は全部 public/index.php に渡す
+    RewriteRule ^ public/index.php [L]
+</IfModule>
+
+# .env や設定ファイルへの直接アクセス禁止
+<FilesMatch "^(\.env|composer\.(json|lock)|package\.json|vite\.config\.(js|ts)|yarn\.lock|pnpm.*)$">
+    Require all denied
+</FilesMatch>
+
+# ディレクトリ一覧を禁止
+Options -Indexes
