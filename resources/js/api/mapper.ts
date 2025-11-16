@@ -1,4 +1,4 @@
-import type { QuizPost, FeedItem } from "../QuizApp";
+import type { QuizPost, FeedItem, Visibility } from "../QuizApp";
 
 // APIの行 → 既存のQuizPostへ
 export const fromQuizRow = (r: {
@@ -7,6 +7,7 @@ export const fromQuizRow = (r: {
   model_answer?: string | null; note?: string | null;
   hashtags: string[]; created_at: string;
   author_id?: number | null;
+  visibility?: number | null;
 }) => ({
   id: r.id,
   question: r.question,
@@ -21,6 +22,7 @@ export const fromQuizRow = (r: {
     typeof r.author_id === "number"
       ? (r.author_id as number)
       : undefined,
+  visibility: (r.visibility as Visibility) ?? 1,
 });
 
 
@@ -36,6 +38,7 @@ export const toQuizRow = (p: QuizPost) => ({
   hashtags: p.hashtags,
   created_at: new Date(p.createdAt).toISOString(),
   author_id: p.author_id ?? null,
+  visibility: p.visibility ?? 1,
 });
 
 // FeedItem → API行（dataはそのままJSONで送る）

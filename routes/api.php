@@ -115,6 +115,7 @@ Route::post('/quizzes/bulk', function (Request $request) {
             $modelAnswer = $row['model_answer'] ?? null;
             $note = $row['note'] ?? null;
             $hashtags = $row['hashtags'] ?? [];
+            $visibility = $row['visibility'] ?? 1;
             $authorId = $row['author_id'] ?? null;
             // created_at はフロントの値は使わず、サーバー時間に固定
             $createdAt = now();
@@ -132,6 +133,7 @@ Route::post('/quizzes/bulk', function (Request $request) {
                     'model_answer' => $modelAnswer,
                     'note' => $note,
                     'hashtags' => json_encode($hashtags, JSON_UNESCAPED_UNICODE),
+                    'visibility' => $visibility,
                     'created_at' => $createdAt,
                 ]
             );

@@ -24,6 +24,7 @@ import axios from "axios";
    型定義
 ========================= */
 export type QuizType = "choice" | "text";
+export type Visibility = 1 | 2 | 3; // 1:プライベート, 2:フォロワー限定, 3:グローバル
 
 export type QuizPost = {
   id: string;
@@ -39,6 +40,7 @@ export type QuizPost = {
   hashtags: string[];
   createdAt: number;
   author_id: number;
+  visibility: Visibility;
 };
 
 // JSONファイルの1問分の型
@@ -121,6 +123,8 @@ const seedsToPosts = (seeds: QuizSeed[]): QuizPost[] => {
     note: s.note || undefined,
     hashtags: s.hashtags ?? [],
     createdAt: now + i,
+    author_id: CURRENT_USER_ID,
+    visibility: 1,
   }));
 };
 
@@ -371,7 +375,7 @@ const Composer: React.FC<{
   // const [modelAnswer, setModelAnswer] = useState("");
   const [sharedTags, setSharedTags] = useState<string>(""); // 共通タグ（全問題に適用）
   const [activeIdx, setActiveIdx] = useState<number>(0); // 表示中の問題インデックス
-
+const [visibility, setVisibility] = useState<Visibility>(1);
   // 複数問題 用 state（最大10）
   type Draft = {
     type: QuizType;
@@ -443,7 +447,8 @@ const Composer: React.FC<{
   // 複数用の Post 化関数（共通タグを使う）
   const toQuizPostWithSharedTags = (
     d: Draft,
-    tagsText: string
+    tagsText: string,
+    visibility: Visibility
   ): QuizPost | null => {
     if (!d.question.trim()) return null;
     const tags = parseHashtags(tagsText); // ← 共通タグ
@@ -463,6 +468,7 @@ const Composer: React.FC<{
         hashtags: tags, // ← 共通タグをセット
         createdAt: Date.now(),
         author_id: CURRENT_USER_ID,
+        visibility,
       };
     } else {
       if (!d.modelAnswer.trim()) return null;
@@ -475,6 +481,7 @@ const Composer: React.FC<{
         hashtags: tags, // ← 共通タグをセット
         createdAt: Date.now(),
         author_id: CURRENT_USER_ID,
+        visibility,
       };
     }
   };
@@ -485,10 +492,10 @@ const Composer: React.FC<{
     if (tags.length === 0) return false;
 
     const posts = drafts
-      .map((d) => toQuizPostWithSharedTags(d, sharedTags))
+      .map((d) => toQuizPostWithSharedTags(d, sharedTags, visibility))
       .filter(Boolean) as QuizPost[];
     return posts.length === drafts.length;
-  }, [drafts, sharedTags]);
+  }, [drafts, sharedTags, visibility]);
 
   // const submitSingle = () => {
   //   const p = toQuizPost({
@@ -516,7 +523,7 @@ const Composer: React.FC<{
   const submitMulti = () => {
     if (!onPostBundle) return;
     const posts = drafts
-      .map((d) => toQuizPostWithSharedTags(d, sharedTags))
+      .map((d) => toQuizPostWithSharedTags(d, sharedTags, visibility))
       .filter(Boolean) as QuizPost[];
     if (posts.length === 0 || posts.length > 10) return;
     onPostBundle(posts);
@@ -536,6 +543,46 @@ const Composer: React.FC<{
             placeholder="#英単語 #歴史 など（カンマ・空白区切り）"
             className="w-full px-3 py-2 bg-gray-50 rounded-xl border border-gray-200"
           />
+        </div>
+        
+{/* ★ 公開範囲の選択 */}
+        <div className="mb-2">
+          <div className="text-xs font-bold mb-1">公開範囲</div>
+          <div className="flex gap-2 text-sm">
+            <button
+              type="button"
+              onClick={() => setVisibility(1)}
+              className={`px-3 py-1 rounded-full border ${
+                visibility === 1
+                  ? "bg-black text-white border-black"
+                  : "bg-gray-50 text-gray-700 border-gray-300"
+              }`}
+            >
+              プライベート
+            </button>
+            <button
+              type="button"
+              onClick={() => setVisibility(2)}
+              className={`px-3 py-1 rounded-full border ${
+                visibility === 2
+                  ? "bg-black text-white border-black"
+                  : "bg-gray-50 text-gray-700 border-gray-300"
+              }`}
+            >
+              フォロワー限定
+            </button>
+            <button
+              type="button"
+              onClick={() => setVisibility(3)}
+              className={`px-3 py-1 rounded-full border ${
+                visibility === 3
+                  ? "bg-black text-white border-black"
+                  : "bg-gray-50 text-gray-700 border-gray-300"
+              }`}
+            >
+              グローバル
+            </button>
+          </div>
         </div>
 
         {/* ナビゲーション（＜ 問題 x/y ＞） */}
