@@ -54,13 +54,28 @@ export async function getMe() {
 /* =========================================
    クイズ/フィード
 ========================================= */
-export async function getQuizzes() {
-  const res = await fetch(`${API_BASE}/quizzes`, {
+// export async function getQuizzes(viewerId?: number | null) {
+//   const param = viewerId ? `?viewer_id=${encodeURIComponent(String(viewerId))}` : "";
+//   const res = await fetch(`${API_BASE}/quizzes${param}`, {
+//     cache: "no-store",
+//     credentials: "include",
+//   });
+//   await assertOk(res, "getQuizzes");
+//   return res.json(); // 配列
+// }
+export async function getQuizzes(viewerId?: number) {
+  const param =
+    viewerId && viewerId > 0
+      ? `?viewer_id=${encodeURIComponent(String(viewerId))}`
+      : "";
+  const res = await fetch(`${API_BASE}/quizzes${param}`, {
     cache: "no-store",
     credentials: "include",
   });
-  await assertOk(res, "getQuizzes");
-  return res.json(); // 配列
+  if (!res.ok) {
+    throw new Error(`getQuizzes failed: ${res.status}`);
+  }
+  return res.json();
 }
 
 export async function bulkUpsertQuizzes(rows: any[]) {

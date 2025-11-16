@@ -6,6 +6,7 @@ export const fromQuizRow = (r: {
   choices?: string[] | null; correct_index?: number | null;
   model_answer?: string | null; note?: string | null;
   hashtags: string[]; created_at: string;
+  author_id?: number | null;
 }) => ({
   id: r.id,
   question: r.question,
@@ -16,6 +17,10 @@ export const fromQuizRow = (r: {
   note: r.note ?? undefined,
   hashtags: r.hashtags,
   createdAt: new Date(r.created_at).getTime(),
+  author_id:
+    typeof r.author_id === "number"
+      ? (r.author_id as number)
+      : undefined,
 });
 
 

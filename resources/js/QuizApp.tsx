@@ -2,8 +2,11 @@ import React, { useEffect, useMemo, useState } from "react";
 // 例: src/QuizApp.tsx の先頭付近
 import { getQuizzes } from "./api/client";
 import { fromQuizRow } from "./api/mapper";
-import { bulkUpsertQuizzes, postFeed, patchFeed } from "./api/client";
+import { bulkUpsertQuizzes, postFeed, patchFeed, API_BASE } from "./api/client";
 import { toQuizRow, toFeedRow } from "./api/mapper";
+import axios from "axios";
+  // ★ フォロー中ユーザーID一覧
+  
 
 /**
  * スマホ向け・X（旧Twitter）風UIの個人用クイズアプリ（完全版）
@@ -94,7 +97,7 @@ declare global {
 }
 // ログイン中ユーザーID（未ログインは 0 扱い）
 const CURRENT_USER_ID = window.Ignos?.userId ?? 0;
-
+console.log("DEBUG Current User ID =", CURRENT_USER_ID);
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
 
 // #タグ入力を配列化（#, 空白/カンマ/改行区切り）
@@ -1363,11 +1366,56 @@ export default function QuizApp() {
   const [shareOpen, setShareOpen] = useState(false);
   const [shareTag, setShareTag] = useState<string>("");
   const [shareMessage, setShareMessage] = useState<string>("");
- 
+  const [followIds, setFollowIds] = useState<number[]>([]);
+   // フォロー中ユーザーID一覧
+  // const [followIds, setFollowIds] = useState<number[]>([]);
+
+  //   useEffect(() => {
+  //   (async () => {
+  //     try {
+  //       const res = await axios.get("/api/following-ids");
+  //       const ids: number[] = res.data?.ids ?? [];
+  //       setFollowIds(ids);
+  //       console.log("DEBUG followIds =", ids);
+  //     } catch (e) {
+  //       console.error("following-ids fetch failed", e);
+  //     }
+  //   })();
+  // }, []);
+// client.ts と同じように API_BASE を使うなら、先頭で import しておいてください。
+// 例: import { API_BASE } from "./api/client";
+
+useEffect(() => {
+  if (!CURRENT_USER_ID) return; // 未ログインなら何もしない
+
+  (async () => {
+    try {
+      const res = await fetch(
+        `${API_BASE}/follows?viewer_id=${encodeURIComponent(
+          String(CURRENT_USER_ID)
+        )}`,
+        { credentials: "include" }
+      );
+
+      if (!res.ok) {
+        console.error("follows fetch failed status =", res.status);
+        return;
+      }
+
+      const json = await res.json();
+      const ids: number[] = json.ids ?? [];
+      setFollowIds(ids);
+      console.log("DEBUG followIds =", ids);
+    } catch (e) {
+      console.error("follows fetch failed", e);
+    }
+  })();
+}, []);
+
   useEffect(() => {
     (async () => {
       try {
-        const rows = await getQuizzes();
+        const rows = await getQuizzes(CURRENT_USER_ID);
         const apiPosts: QuizPost[] = rows.map(fromQuizRow);
 
         // posts / feed を API の結果だけで構成
@@ -1394,7 +1442,7 @@ export default function QuizApp() {
     const ac = new AbortController();
     (async () => {
       try {
-        const rows = await getQuizzes();
+        const rows = await getQuizzes(CURRENT_USER_ID);
         const apiPosts: QuizPost[] = rows.map(fromQuizRow);
 
         // ★ APIにデータがあればフラグON
@@ -1459,10 +1507,20 @@ export default function QuizApp() {
   // }, [hasApiData]); // ★ 依存に追加
 
   // どこかのコンポーネント内（例えば QuizApp の中）
+//   useEffect(() => {
+//   (async () => {
+//     try {
+//       const result = await axios.get("/api/followers");
+//       console.log("DEBUG followers =", result.data);
+//     } catch (e) {
+//       console.error("followers fetch failed", e);
+//     }
+//   })();
+// }, []);
   useEffect(() => {
     (async () => {
       try {
-        const data = await getQuizzes();
+        const data = await getQuizzes(CURRENT_USER_ID);
         console.log("API /quizzes ->", data); // ← ここに test1 などが出ればOK
       } catch (e) {
         console.error(e);
@@ -1507,7 +1565,7 @@ export default function QuizApp() {
         // if (ac.signal.aborted) return;
 
         // const apiPosts = rows.map(fromQuizRow);
-        const rows = await getQuizzes();
+        const rows = await getQuizzes(CURRENT_USER_ID);
         // ここを明示的に型付け
         const apiPosts: QuizPost[] = rows.map(fromQuizRow);
         setPosts((prev) => {
@@ -1570,6 +1628,31 @@ export default function QuizApp() {
     bulkUpsertQuizzes(bundle.map(toQuizRow)).catch(() => {});
     postFeed(toFeedRow(item as any)).catch(() => {});
   };
+
+   const visibleFeed = useMemo(() => {
+  // 自分のID + フォロー中ユーザーID
+  const allowed = new Set<number>([CURRENT_USER_ID, ...followIds]);
+
+  return feed.filter((item) => {
+    // 共有投稿は常に表示
+    if (item.kind === "share") return true;
+
+    let authorId: number | null | undefined;
+
+    if (item.kind === "quiz") {
+      authorId = item.data.author_id;
+    } else if (item.kind === "quizBundle") {
+      authorId = item.data[0]?.author_id;
+    }
+
+    // ★ author_id が入っていない古い投稿は「自分の投稿扱い」で表示
+    if (authorId == null) return true;
+
+    // ★ allowed（自分＋フォロー中）に含まれる投稿だけ表示
+    return allowed.has(authorId);
+  });
+}, [feed, followIds]);
+
 
   // 共有フロー
   const openShare = (tag: string) => {

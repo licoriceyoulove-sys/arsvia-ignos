@@ -62,25 +62,60 @@ Route::get('/db-ping', function () {
 
 //     return response()->json($rows);
 // });
+// Route::get('/quizzes', function (Request $request) {
+//     // フロントから ?viewer_id=xxx で渡してもらう
+//     $viewerId = $request->query('viewer_id');
+
+//     $query = DB::table('quizzes');
+
+//     if (!empty($viewerId)) {
+//         // follows テーブルから「自分がフォローしているユーザーID」を取得
+//         //   user_id        = フォローする側（自分）
+//         //   target_user_id = フォローされる側
+//         $followeeIds = DB::table('follows')
+//             ->where('user_id', $viewerId)
+//             ->pluck('target_user_id')
+//             ->toArray();
+
+//         // 自分 + フォロー中の人たち
+//         $ids = array_unique(array_merge([$viewerId], $followeeIds));
+
+//         // quizzes.author_id で絞り込み
+//         $query->whereIn('author_id', $ids);
+//     }
+
+//     $rows = $query
+//         ->orderBy('created_at', 'desc')
+//         ->get();
+
+//     // choices, hashtags は JSON 文字列として保存されているのでデコード
+//     $rows = $rows->map(function ($r) {
+//         $r->choices  = $r->choices  !== null ? json_decode($r->choices, true)  : null;
+//         $r->hashtags = $r->hashtags !== null ? json_decode($r->hashtags, true) : [];
+//         return $r;
+//     });
+
+//     return response()->json($rows);
+// });
 Route::get('/quizzes', function (Request $request) {
     // フロントから ?viewer_id=xxx で渡してもらう
-    $viewerId = $request->query('viewer_id');
+    $viewerId = (int) $request->query('viewer_id', 0);
 
     $query = DB::table('quizzes');
 
-    if (!empty($viewerId)) {
-        // follows テーブルから「自分がフォローしているユーザーID」を取得
-        //   user_id        = フォローする側（自分）
-        //   target_user_id = フォローされる側
+    if ($viewerId > 0) {
+        // 1. フォロー情報テーブルからフォロー中ユーザー ID を取得
+        // follows.user_id        = フォローする側（自分）
+        // follows.target_user_id = フォローされる側（相手）
         $followeeIds = DB::table('follows')
             ->where('user_id', $viewerId)
             ->pluck('target_user_id')
             ->toArray();
 
-        // 自分 + フォロー中の人たち
+        // 2. 自分 + フォロー中ユーザー 全員のID
         $ids = array_unique(array_merge([$viewerId], $followeeIds));
 
-        // quizzes.author_id で絞り込み
+        // 3. quizzes.author_id が このID一覧に含まれる投稿だけを取得
         $query->whereIn('author_id', $ids);
     }
 
@@ -88,7 +123,7 @@ Route::get('/quizzes', function (Request $request) {
         ->orderBy('created_at', 'desc')
         ->get();
 
-    // choices, hashtags は JSON 文字列として保存されているのでデコード
+    // choices, hashtags は JSON 文字列なのでデコード
     $rows = $rows->map(function ($r) {
         $r->choices  = $r->choices  !== null ? json_decode($r->choices, true)  : null;
         $r->hashtags = $r->hashtags !== null ? json_decode($r->hashtags, true) : [];
@@ -207,4 +242,28 @@ Route::patch('/feed/{id}', function (Request $request, string $id) {
         ]);
 
     return response()->json(['ok' => true]);
+});
+
+Route::get('/follows', function (Request $request) {
+    // クエリパラメータ ?viewer_id=1 を想定
+    $viewerId = $request->query('viewer_id');
+
+    if (empty($viewerId)) {
+        return response()->json([
+            'ids' => [],
+        ]);
+    }
+
+    // follows テーブルから「viewerId がフォローしているユーザーID」を取得
+    // user_id        = フォローする側（自分）
+    // target_user_id = フォローされる側（相手）
+    $ids = DB::table('follows')
+        ->where('user_id', $viewerId)
+        ->pluck('target_user_id')
+        ->values()   // 0,1,2,... に詰め直し
+        ->all();
+
+    return response()->json([
+        'ids' => $ids,   // 例: [2, 5, 10]
+    ]);
 });
