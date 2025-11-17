@@ -201,8 +201,9 @@ const BottomNav: React.FC<{
   onSearch: () => void;
   onFolders: () => void;
   onNotify: () => void;
-  onPost: () => void;
-}> = ({ active, onHome, onSearch, onFolders, onNotify, onPost }) => (
+  // onPost: () => void;
+  onProfile: () => void;
+}> = ({ active, onHome, onSearch, onFolders, onNotify, onProfile }) => (
   <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-30">
     <div className="max-w-md mx-auto grid grid-cols-5 text-xs">
       <button
@@ -269,12 +270,21 @@ const BottomNav: React.FC<{
         />
       </button>
 
+      {/* ▶ ここがプロフィールアイコン ◀ */}
       <button
-        onClick={onPost}
-        className="py-3 flex flex-col items-center text-black"
-        aria-label="投稿"
+        onClick={onProfile}
+        className={`py-3 flex flex-col items-center ${
+          active === "profile" ? "text-black" : "text-gray-500"
+        }`}
+        aria-label="プロフィール"
       >
-        <img src={iconUrl("post")} alt="投稿" className="w-6 h-6 mb-1" />
+        <img
+          src={iconUrl("user")} // icons/user.png を用意しておくと◎
+          alt="プロフィール"
+          className={`w-6 h-6 mb-1 ${
+            active === "profile" ? "opacity-100" : "opacity-60"
+          }`}
+        />
       </button>
     </div>
   </nav>
@@ -1756,6 +1766,31 @@ useEffect(() => {
         </div>
       </Modal>
 
+      {/* ▶ ホーム画面用フローティング投稿ボタン（ブルースカイ風） ◀ */}
+      {mode === "home" && (
+        <button
+          onClick={() => setComposerOpen(true)}
+          className="
+            fixed
+            bottom-20 right-4
+            z-40
+            w-14 h-14
+            rounded-full
+            bg-black
+            text-white
+            shadow-lg
+            flex items-center justify-center
+          "
+          aria-label="投稿"
+        >
+          <img
+            src={iconUrl("post")}
+            alt="投稿"
+            className="w-7 h-7"
+          />
+        </button>
+      )}
+      
       {/* ボトムナビ */}
       <BottomNav
         active={activeTab}
@@ -1763,7 +1798,11 @@ useEffect(() => {
         onSearch={() => setMode("search")}
         onFolders={() => setMode("folders")}
         onNotify={() => setMode("notifications")}
-        onPost={() => setComposerOpen(true)}
+          onProfile={() => {
+    // プロフィール画面は後で作るので、今はダミー動作
+    console.log("プロフィール画面は後ほど実装予定です");
+    // 例: 将来的には setMode("profile") などにする想定
+  }}
       />
     </div>
   );
