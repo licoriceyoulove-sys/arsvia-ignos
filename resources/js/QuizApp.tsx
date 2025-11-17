@@ -219,7 +219,6 @@ const BottomNav: React.FC<{
             active === "home" ? "opacity-100" : "opacity-60"
           }`}
         />
-        <div>ホーム</div>
       </button>
 
       <button
@@ -236,7 +235,6 @@ const BottomNav: React.FC<{
             active === "search" ? "opacity-100" : "opacity-60"
           }`}
         />
-        <div>検索</div>
       </button>
 
       <button
@@ -253,7 +251,6 @@ const BottomNav: React.FC<{
             active === "folders" ? "opacity-100" : "opacity-60"
           }`}
         />
-        <div>クイズ</div>
       </button>
 
       <button
@@ -270,7 +267,6 @@ const BottomNav: React.FC<{
             active === "notifications" ? "opacity-100" : "opacity-60"
           }`}
         />
-        <div>通知</div>
       </button>
 
       <button
@@ -279,100 +275,47 @@ const BottomNav: React.FC<{
         aria-label="投稿"
       >
         <img src={iconUrl("post")} alt="投稿" className="w-6 h-6 mb-1" />
-        <div>投稿</div>
       </button>
     </div>
   </nav>
 );
 
-// const BottomNav: React.FC<{
-//   active: string;
-//   onHome: () => void;
-//   onSearch: () => void;
-//   onFolders: () => void;
-//   onNotify: () => void;
-//   onPost: () => void;
-// }> = ({ active, onHome, onSearch, onFolders, onNotify, onPost }) => (
-//   <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-30">
-//     <div className="max-w-md mx-auto grid grid-cols-5 text-xs">
-//       <button
-//         onClick={onHome}
-//         className={`py-3 ${active === "home" ? "text-black" : "text-gray-500"}`}
-//         aria-label="ホーム"
-//       >
-//         🏠<div>ホーム</div>
-//       </button>
-//       <button
-//         onClick={onSearch}
-//         className={`py-3 ${
-//           active === "search" ? "text-black" : "text-gray-500"
-//         }`}
-//         aria-label="検索"
-//       >
-//         🔍<div>検索</div>
-//       </button>
-//       <button
-//         onClick={onFolders}
-//         className={`py-3 ${
-//           active === "folders" ? "text-black" : "text-gray-500"
-//         }`}
-//         aria-label="クイズ"
-//       >
-//         🗂️<div>クイズ</div>
-//       </button>
-//       <button
-//         onClick={onNotify}
-//         className={`py-3 ${
-//           active === "notifications" ? "text-black" : "text-gray-500"
-//         }`}
-//         aria-label="通知"
-//       >
-//         🔔<div>通知</div>
-//       </button>
-//       <button onClick={onPost} className="py-3 text-black" aria-label="投稿">
-//         ✍️<div>投稿</div>
-//       </button>
-//     </div>
-//   </nav>
-// );
-
 const Modal: React.FC<{
   open: boolean;
   onClose: () => void;
   children: React.ReactNode;
-  title?: string;
-}> = ({ open, onClose, children, title }) => {
+  // title?: string;  // ← もう使わないなら消してOK
+}> = ({ open, onClose, children }) => {
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-40">
+      {/* 背景（タップで閉じる） */}
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="absolute inset-x-0 bottom-0 max-w-md mx-auto bg-white rounded-t-2xl shadow-xl">
-        <div className="flex items-center justify-between px-4 h-12 border-b">
-          <div className="font-bold">{title ?? ""}</div>
-          <button onClick={onClose} className="text-gray-500">
-            閉じる
-          </button>
-        </div>
-        <div className="p-4">{children}</div>
+
+      {/* フルスクリーンのモーダル本体 */}
+      <div
+        className="
+          absolute inset-0
+          max-w-md mx-auto
+          bg-white
+          flex flex-col
+        "
+      >
+        {/* 中身全体は子コンポーネント側（Composer）で構成 */}
+        {children}
       </div>
     </div>
   );
 };
 
+
+
+
 const Composer: React.FC<{
   onCancel: () => void;
   onPostBundle?: (posts: QuizPost[]) => void; // 追加：バンドル用
 }> = ({ onCancel, onPostBundle }) => {
-  // const [multi] = useState<boolean>(true);
 
-  // // 単問 用 state（以前のもの）
-  // const [type, setType] = useState<QuizType>("choice");
-  // const [question, setQuestion] = useState("");
-  // const [note, setNote] = useState("");
-  // const [tagsInput, setTagsInput] = useState("");
-  // const [correctChoice, setCorrectChoice] = useState<string>("");
-  // const [wrongChoices, setWrongChoices] = useState<string[]>(["", ""]);
-  // const [modelAnswer, setModelAnswer] = useState("");
   const [sharedTags, setSharedTags] = useState<string>(""); // 共通タグ（全問題に適用）
   const [activeIdx, setActiveIdx] = useState<number>(0); // 表示中の問題インデックス
 const [visibility, setVisibility] = useState<Visibility>(1);
@@ -396,53 +339,6 @@ const [visibility, setVisibility] = useState<Visibility>(1);
     modelAnswer: "",
   });
   const [drafts, setDrafts] = useState<Draft[]>([makeEmptyDraft()]);
-
-  // const toQuizPost = (d: Draft): QuizPost | null => {
-  //   if (!d.question.trim()) return null;
-  //   const tags = parseHashtags(d.tagsInput);
-  //   if (tags.length === 0) return null;
-
-  //   if (d.type === "choice") {
-  //     const correctOk = d.correctChoice.trim().length > 0;
-  //     const wrongFilled = d.wrongChoices.map((s) => s.trim()).filter(Boolean);
-  //     if (!correctOk || wrongFilled.length < 1) return null;
-  //     return {
-  //       id: uid(),
-  //       question: d.question.trim(),
-  //       type: "choice",
-  //       choices: [d.correctChoice.trim(), ...wrongFilled],
-  //       correctIndex: 0,
-  //       note: d.note.trim() || undefined,
-  //       hashtags: tags,
-  //       createdAt: Date.now(),
-  //     };
-  //   } else {
-  //     if (!d.modelAnswer.trim()) return null;
-  //     return {
-  //       id: uid(),
-  //       question: d.question.trim(),
-  //       type: "text",
-  //       modelAnswer: d.modelAnswer.trim(),
-  //       note: d.note.trim() || undefined,
-  //       hashtags: tags,
-  //       createdAt: Date.now(),
-  //     };
-  //   }
-  // };
-
-  // const canPostSingle = useMemo(
-  //   () =>
-  //     !!toQuizPost({
-  //       type,
-  //       question,
-  //       note,
-  //       tagsInput,
-  //       correctChoice,
-  //       wrongChoices,
-  //       modelAnswer,
-  //     }),
-  //   [type, question, note, tagsInput, correctChoice, wrongChoices, modelAnswer]
-  // );
 
   // 複数用の Post 化関数（共通タグを使う）
   const toQuizPostWithSharedTags = (
@@ -497,28 +393,6 @@ const [visibility, setVisibility] = useState<Visibility>(1);
     return posts.length === drafts.length;
   }, [drafts, sharedTags, visibility]);
 
-  // const submitSingle = () => {
-  //   const p = toQuizPost({
-  //     type,
-  //     question,
-  //     note,
-  //     tagsInput,
-  //     correctChoice,
-  //     wrongChoices,
-  //     modelAnswer,
-  //   });
-  //   if (!p) return;
-  //   onPost(p);
-  //   onCancel();
-  // };
-
-  // const submitMulti = () => {
-  //   if (!onPostBundle) return;
-  //   const posts = drafts.map(toQuizPost).filter(Boolean) as QuizPost[];
-  //   if (posts.length === 0 || posts.length > 10) return;
-  //   onPostBundle(posts);
-  //   onCancel();
-  // };
   // submitMulti も置き換え
   const submitMulti = () => {
     if (!onPostBundle) return;
@@ -531,9 +405,35 @@ const [visibility, setVisibility] = useState<Visibility>(1);
   };
 
   // UI
+    // UI
   return (
-    <div>
-      <div className="space-y-4">
+    // モーダル全体を上下レイアウトにする
+    <div className="flex flex-col h-full">
+      {/* 上部ヘッダー（固定表示） */}
+      <div className="flex items-center justify-between px-4 h-12 border-b flex-none">
+        <button
+          onClick={onCancel}
+          className="text-sm text-gray-600"
+        >
+          キャンセル
+        </button>
+
+        {/* 真ん中はタイトル入れてもOK（今は空） */}
+        <div className="text-sm font-bold" />
+
+        <button
+          disabled={!canPostMulti}
+          onClick={submitMulti}
+          className={`px-4 py-1 rounded-full text-sm font-bold ${
+            canPostMulti ? "bg-black text-white" : "bg-gray-200 text-gray-400"
+          }`}
+        >
+          投稿（{drafts.length}問）
+        </button>
+      </div>
+
+      {/* 下：スクロール可能な投稿フォーム本体 */}
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
         {/* 共通タグ入力（全問題に適用） */}
         <div className="mb-2">
           <div className="text-xs font-bold mb-1">タグ設定</div>
@@ -544,8 +444,8 @@ const [visibility, setVisibility] = useState<Visibility>(1);
             className="w-full px-3 py-2 bg-gray-50 rounded-xl border border-gray-200"
           />
         </div>
-        
-{/* ★ 公開範囲の選択 */}
+
+        {/* 公開範囲の選択 */}
         <div className="mb-2">
           <div className="text-xs font-bold mb-1">公開範囲</div>
           <div className="flex gap-2 text-sm">
@@ -646,28 +546,11 @@ const [visibility, setVisibility] = useState<Visibility>(1);
           )}
         </div>
       </div>
-
-      {/* ボタン */}
-      <div className="flex gap-2 justify-end pt-4">
-        <button
-          onClick={onCancel}
-          className="px-4 py-2 rounded-full font-bold bg-gray-100"
-        >
-          キャンセル
-        </button>
-        <button
-          disabled={!canPostMulti}
-          onClick={submitMulti}
-          className={`px-4 py-2 rounded-full font-bold ${
-            canPostMulti ? "bg-black text-white" : "bg-gray-200 text-gray-400"
-          }`}
-        >
-          投稿（{drafts.length}問）
-        </button>
-      </div>
     </div>
   );
 };
+
+
 
 // 複数問題エディタ
 const MultiEditor: React.FC<{
@@ -813,7 +696,7 @@ const FolderList: React.FC<{
 
   return (
     <Card>
-      <SectionTitle title="クイズフォルダ（ハッシュタグ）" />
+      <SectionTitle title="タグから探す" />
       <div className="px-4 pb-4 space-y-2">
         {tagCount.length === 0 && (
           <div className="text-gray-500 text-sm">まだ投稿がありません</div>
@@ -828,13 +711,13 @@ const FolderList: React.FC<{
               onClick={() => onStartQuiz(tag)}
               className="px-3 py-1 rounded-full text-sm bg-black text-white"
             >
-              開始
+              Answer
             </button>
             <button
               onClick={() => onShare(tag)}
               className="px-3 py-1 rounded-full text-sm border"
             >
-              共有
+              Look！
             </button>
           </div>
         ))}
@@ -1524,46 +1407,6 @@ useEffect(() => {
     return () => ac.abort();
   }, []);
 
-  // useEffect(() => {
-  //   if (hasApiData) return; // ★ APIを優先。データがあるならローカル注入しない
-
-  //   const storedPosts = loadPosts();
-  //   const storedFeed = loadFeed();
-
-  //   const { posts: catPosts, newlySeededKeys } = loadCategorySeedsAsPosts();
-  //   const mergedPosts = [...catPosts, ...storedPosts];
-  //   setPosts(mergedPosts);
-
-  //   const catFeed: FeedItem[] = catPosts.map((post) => ({
-  //     id: post.id,
-  //     kind: "quiz",
-  //     data: post,
-  //     createdAt: post.createdAt,
-  //     likes: 0,
-  //     retweets: 0,
-  //     answers: 0,
-  //   }));
-  //   const mergedFeed = [...catFeed, ...storedFeed];
-  //   setFeed(mergedFeed);
-
-  //   if (newlySeededKeys.length > 0) {
-  //     const prev = loadSeededCats();
-  //     const next = Array.from(new Set([...prev, ...newlySeededKeys]));
-  //     saveSeededCats(next);
-  //   }
-  // }, [hasApiData]); // ★ 依存に追加
-
-  // どこかのコンポーネント内（例えば QuizApp の中）
-//   useEffect(() => {
-//   (async () => {
-//     try {
-//       const result = await axios.get("/api/followers");
-//       console.log("DEBUG followers =", result.data);
-//     } catch (e) {
-//       console.error("followers fetch failed", e);
-//     }
-//   })();
-// }, []);
   useEffect(() => {
     (async () => {
       try {
@@ -1575,41 +1418,11 @@ useEffect(() => {
     })();
   }, []);
 
-  // ① 既存シード＋ローカル読み込み（保存はしない）
-  // useEffect(() => {
-    // const storedPosts = loadPosts();
-    // const storedFeed = loadFeed();
-
-    // const { posts: catPosts, newlySeededKeys } = loadCategorySeedsAsPosts();
-    // const mergedPosts = [...catPosts, ...storedPosts];
-  //   setPosts(mergedPosts);
-
-  //   const catFeed: FeedItem[] = catPosts.map((post) => ({
-  //     id: post.id,
-  //     kind: "quiz",
-  //     data: post,
-  //     createdAt: post.createdAt,
-  //     likes: 0,
-  //     retweets: 0,
-  //     answers: 0,
-  //   }));
-  //   const mergedFeed = [...catFeed, ...storedFeed];
-  //   setFeed(mergedFeed);
-
-  //   if (newlySeededKeys.length > 0) {
-  //     const prev = loadSeededCats();
-  //     const next = Array.from(new Set([...prev, ...newlySeededKeys]));
-  //     saveSeededCats(next);
-  //   }
-  // }, []);
-
   // ② APIから取得して重複なしでマージ
   useEffect(() => {
     const ac = new AbortController();
     (async () => {
       try {
-        // const rows = await getQuizzes(); // signal付与できる実装なら渡す
-        // if (ac.signal.aborted) return;
 
         // const apiPosts = rows.map(fromQuizRow);
         const rows = await getQuizzes(CURRENT_USER_ID);
@@ -1906,16 +1719,14 @@ useEffect(() => {
 
       {/* 投稿モーダル */}
       <Modal
-        open={composerOpen}
-        onClose={() => setComposerOpen(false)}
-        title="投稿"
-      >
-        <Composer
-          // onPost={addPost} // 単問
-          onPostBundle={addPostBundle} // 複数
-          onCancel={() => setComposerOpen(false)}
-        />
-      </Modal>
+  open={composerOpen}
+  onClose={() => setComposerOpen(false)}
+>
+  <Composer
+    onPostBundle={addPostBundle}
+    onCancel={() => setComposerOpen(false)}
+  />
+</Modal>
 
       {/* 共有メッセージ編集モーダル */}
       <Modal open={shareOpen} onClose={() => setShareOpen(false)} title="共有">
