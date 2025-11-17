@@ -51,6 +51,17 @@ import type {
 import { Header } from "./components/layout/Header";
 import { BottomNav } from "./components/layout/BottomNav";
 import { Modal } from "./components/layout/Modal";
+
+import { Card } from "./components/ui/Card";
+import { SectionTitle } from "./components/ui/SectionTitle";
+import { TagChip } from "./components/ui/TagChip";
+import { ActionBar } from "./components/ui/ActionBar";
+
+import { CURRENT_USER_ID, getUserDisplayName, getUserScreenName } from "./utils/user";
+console.log("DEBUG Current User ID =", CURRENT_USER_ID);
+
+import { ProfileScreen } from "./components/profile/ProfileScreen";
+
   // ★ フォロー中ユーザーID一覧
   
 
@@ -66,20 +77,7 @@ import { Modal } from "./components/layout/Modal";
  * - Tailwind v4 を想定（index.css に `@import "tailwindcss";`、postcss は `@tailwindcss/postcss`）
  */
 
-/* =========================
-   永続化／ユーティリティ
-========================= */
-declare global {
-  interface Window {
-    Ignos?: {
-      userId: number;
-      name?: string;
-    };
-  }
-}
-// ログイン中ユーザーID（未ログインは 0 扱い）
-const CURRENT_USER_ID = window.Ignos?.userId ?? 0;
-console.log("DEBUG Current User ID =", CURRENT_USER_ID);
+
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
 
 // #タグ入力を配列化（#, 空白/カンマ/改行区切り）
@@ -126,37 +124,6 @@ const fileKeyToCategory = (path: string) => {
 /* =========================
    UI パーツ
 ========================= */
-const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({
-  children,
-  className,
-}) => (
-  <div
-    className={`w-full bg-white border-b border-gray-200 ${className ?? ""}`}
-  >
-    {children}
-  </div>
-);
-
-const SectionTitle: React.FC<{ title: string }> = ({ title }) => (
-  <div className="px-4 py-2 font-bold text-gray-900 text-lg">{title}</div>
-);
-
-const TagChip: React.FC<{
-  tag: string;
-  onClick?: () => void;
-  active?: boolean;
-}> = ({ tag, onClick, active }) => (
-  <button
-    onClick={onClick}
-    className={`px-3 py-1 rounded-full text-sm mr-2 mb-2 border ${
-      active
-        ? "bg-black text-white border-black"
-        : "bg-gray-50 text-gray-700 border-gray-200"
-    }`}
-  >
-    {tag}
-  </button>
-);
 
 // const iconUrl = (name: string) =>
 //   `${import.meta.env.BASE_URL}icons/${name}.png`;
@@ -1105,28 +1072,6 @@ const QuizRunner: React.FC<{
 /* =========================
    タイムラインのアクション
 ========================= */
-const ActionBar: React.FC<{
-  likes: number;
-  retweets: number;
-  answers?: number;
-  onLike: () => void;
-  onRT: () => void;
-  onAnswer?: () => void; // 追加
-}> = ({ likes, retweets, answers, onLike, onRT, onAnswer }) => (
-  <div className="flex items-center gap-6 text-sm text-gray-600 pt-2">
-    <button onClick={onRT} className="flex items-center gap-1">
-      🔁 <span>{retweets}</span>
-    </button>
-    <button onClick={onLike} className="flex items-center gap-1">
-      ⭐ <span>{likes}</span>
-    </button>
-    {onAnswer && (
-      <button onClick={onAnswer} className="flex items-center gap-1">
-        🅰 <span>{typeof answers === "number" ? answers : ""}</span>
-      </button>
-    )}
-  </div>
-);
 
 /* =========================
    メインアプリ
@@ -1139,7 +1084,7 @@ export default function QuizApp() {
   const [composerOpen, setComposerOpen] = useState(false);
 
   const [mode, setMode] = useState<
-    "home" | "folders" | "quiz" | "search" | "notifications" | "answer"
+    "home" | "folders" | "quiz" | "search" | "notifications" | "answer"  | "profile"
   >("home");
   const [answerPool, setAnswerPool] = useState<QuizPost[] | null>(null);
   const [hasApiData, setHasApiData] = useState(false);
@@ -1148,7 +1093,8 @@ export default function QuizApp() {
   const [shareTag, setShareTag] = useState<string>("");
   const [shareMessage, setShareMessage] = useState<string>("");
   const [followIds, setFollowIds] = useState<number[]>([]);
-   // フォロー中ユーザーID一覧
+  const [profileUserId, setProfileUserId] = useState<number | null>(null);
+  // フォロー中ユーザーID一覧
   // const [followIds, setFollowIds] = useState<number[]>([]);
 
   //   useEffect(() => {
@@ -1316,6 +1262,21 @@ useEffect(() => {
     setSelectedTag(tag);
     setMode("quiz");
   };
+
+  const openProfile = (userId?: number | null) => {
+  if (!userId || userId === 0) return;
+  setProfileUserId(userId);
+  setMode("profile");
+};
+
+const toggleFollow = (targetId: number) => {
+  setFollowIds((prev) =>
+    prev.includes(targetId)
+      ? prev.filter((id) => id !== targetId)
+      : [...prev, targetId]
+  );
+};
+
   const backToFolders = () => setMode("folders");
 
   // 追加：まとめて投稿
@@ -1438,59 +1399,96 @@ useEffect(() => {
               {feed.map((item) => (
                 <div key={item.id} className="py-3 border-b last:border-b-0">
                   {item.kind === "quiz" ? (
+  <>
+    {/* ユーザー行 */}
+    <button
+      type="button"
+      onClick={() => openProfile(item.data.author_id)}
+      className="flex items-center gap-2 mb-2"
+    >
+      <div className="w-9 h-9 rounded-full bg-gray-300" />
+      <div className="flex flex-col items-start">
+        <span className="text-sm font-bold">
+          {getUserDisplayName(item.data.author_id)}
+        </span>
+        <span className="text-xs text-gray-500">
+          @{getUserScreenName(item.data.author_id)}
+        </span>
+      </div>
+    </button>
+
+    <div className="text-[15px] whitespace-pre-wrap mb-2">
+      {item.data.question}
+    </div>
+    <div className="flex flex-wrap mb-2">
+      {item.data.hashtags.map((t) => (
+        <TagChip
+          key={t + item.id}
+          tag={t}
+          onClick={() => startQuiz(t)}
+        />
+      ))}
+    </div>
+    <div className="text-xs text-gray-500">
+      {new Date(item.createdAt).toLocaleString()} ・{" "}
+      {item.data.type === "choice" ? "選択肢" : "テキスト入力"}
+    </div>
+    <ActionBar
+      likes={item.likes}
+      retweets={item.retweets}
+      answers={item.answers}
+      onLike={() => incLike(item.id)}
+      onRT={() => incRT(item.id)}
+      onAnswer={() => {
+        incAnswer(item.id);
+        setAnswerPool([item.data]);
+        setMode("answer");
+      }}
+    />
+  </>
+) : item.kind === "quizBundle" ? (
+  // ↓このあとに続く quizBundle ブロックを書き換え
+
                     <>
-                      <div className="text-[15px] whitespace-pre-wrap mb-2">
-                        {item.data.question}
-                      </div>
-                      <div className="flex flex-wrap mb-2">
-                        {item.data.hashtags.map((t) => (
-                          <TagChip
-                            key={t + item.id}
-                            tag={t}
-                            onClick={() => startQuiz(t)}
-                          />
-                        ))}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        {new Date(item.createdAt).toLocaleString()} ・{" "}
-                        {item.data.type === "choice"
-                          ? "選択肢"
-                          : "テキスト入力"}
-                      </div>
-                      <ActionBar
-                        likes={item.likes}
-                        retweets={item.retweets}
-                        answers={item.answers}
-                        onLike={() => incLike(item.id)}
-                        onRT={() => incRT(item.id)}
-                        onAnswer={() => {
-                          incAnswer(item.id);
-                          setAnswerPool([item.data]); // ← この投稿だけをプールに
-                          setMode("answer");
-                        }}
-                      />
-                    </>
-                  ) : item.kind === "quizBundle" ? (
-                    <>
-                      <div className="text-[15px] whitespace-pre-wrap mb-2">
-                        {item.data[0]?.question ?? "クイズ（複数）"}
-                      </div>
-                      <div className="text-xs text-gray-500 mb-2">
-                        全{item.data.length}問
-                      </div>
-                      <ActionBar
-                        likes={item.likes}
-                        retweets={item.retweets}
-                        answers={item.answers}
-                        onLike={() => incLike(item.id)}
-                        onRT={() => incRT(item.id)}
-                        onAnswer={() => {
-                          incAnswer(item.id);
-                          setAnswerPool(item.data); // ← バンドル全体をプールに
-                          setMode("answer");
-                        }}
-                      />
-                    </>
+  {/* バンドル投稿のユーザー行（先頭問題の author を利用） */}
+  <button
+    type="button"
+    onClick={() =>
+      openProfile(item.data[0]?.author_id ?? undefined)
+    }
+    className="flex items-center gap-2 mb-2"
+  >
+    <div className="w-9 h-9 rounded-full bg-gray-300" />
+    <div className="flex flex-col items-start">
+      <span className="text-sm font-bold">
+        {getUserDisplayName(item.data[0]?.author_id)}
+      </span>
+      <span className="text-xs text-gray-500">
+        @{getUserScreenName(item.data[0]?.author_id)}
+      </span>
+    </div>
+  </button>
+
+  <div className="text-[15px] whitespace-pre-wrap mb-2">
+    {item.data[0]?.question ?? "クイズ（複数）"}
+  </div>
+  <div className="text-xs text-gray-500 mb-2">
+    全{item.data.length}問
+  </div>
+  <ActionBar
+    likes={item.likes}
+    retweets={item.retweets}
+    answers={item.answers}
+    onLike={() => incLike(item.id)}
+    onRT={() => incRT(item.id)}
+    onAnswer={() => {
+      incAnswer(item.id);
+      setAnswerPool(item.data);
+      setMode("answer");
+    }}
+  />
+</>
+
                   ) : (
                     <>
                       <div className="text-[15px] whitespace-pre-wrap mb-2">
@@ -1564,6 +1562,22 @@ useEffect(() => {
             </div>
           </Card>
         )}
+
+                {/* PROFILE */}
+        {mode === "profile" && profileUserId !== null && (
+          <ProfileScreen
+            userId={profileUserId}
+            posts={posts}
+            isFollowing={followIds.includes(profileUserId)}
+            followingCount={
+              profileUserId === CURRENT_USER_ID ? followIds.length : 0
+            }
+            followerCount={0 /* TODO: API 連携で正確な数に */}
+            onToggleFollow={() => toggleFollow(profileUserId)}
+            onBack={() => setMode("home")}
+          />
+        )}
+
 
         <div className="h-4" />
       </div>
@@ -1639,10 +1653,10 @@ useEffect(() => {
         onSearch={() => setMode("search")}
         onFolders={() => setMode("folders")}
         onNotify={() => setMode("notifications")}
-          onProfile={() => {
-    // プロフィール画面は後で作るので、今はダミー動作
-    console.log("プロフィール画面は後ほど実装予定です");
-    // 例: 将来的には setMode("profile") などにする想定
+  onProfile={() => {
+    if (!CURRENT_USER_ID) return; // 未ログインなら何もしない
+    setProfileUserId(CURRENT_USER_ID);
+    setMode("profile");
   }}
       />
     </div>
