@@ -1,10 +1,56 @@
+// ファイル構成図
+// resources/js/
+//   QuizApp.tsx                // 画面のルート。状態管理＆画面切り替えだけに寄せていく
+
+//   api/
+//     client.ts                // 既存
+//     mapper.ts                // 既存
+
+//   types/
+//     quiz.ts                  // 型定義をここに集約（QuizPost / FeedItem / Visibility など）
+
+//   components/
+//     layout/
+//       Header.tsx             // 画面上部ヘッダー
+//       BottomNav.tsx          // 画面下部ナビ
+//       Modal.tsx              // フルスクリーンモーダル
+
+//     ui/
+//       Card.tsx               // 共通カード
+//       SectionTitle.tsx       // セクションタイトル
+//       TagChip.tsx            // タグのチップ表示
+//       ActionBar.tsx          // いいね／RT／回答ボタン
+
+//     folders/
+//       FolderList.tsx         // 「タグから探す」画面（フォルダ一覧）
+
+//     quiz/
+//       QuizRunner.tsx         // タグからランダム10問
+//       AnswerRunner.tsx       // 1投稿（またはバンドル）に対するクイズ実行
+
+//     composer/
+//       Composer.tsx           // 投稿モーダル全体
+//       MultiEditor.tsx        // 複数問題エディタ（Composer の子）
+
+
 import React, { useEffect, useMemo, useState } from "react";
-// 例: src/QuizApp.tsx の先頭付近
 import { getQuizzes } from "./api/client";
 import { fromQuizRow } from "./api/mapper";
 import { bulkUpsertQuizzes, postFeed, patchFeed, API_BASE } from "./api/client";
 import { toQuizRow, toFeedRow } from "./api/mapper";
 import axios from "axios";
+import type {
+  QuizType,
+  Visibility,
+  QuizPost,
+  QuizSeed,
+  SharePost,
+  FeedItem,
+  FeedQuizBundleItem,
+} from "./types/quiz";
+import { Header } from "./components/layout/Header";
+import { BottomNav } from "./components/layout/BottomNav";
+import { Modal } from "./components/layout/Modal";
   // ★ フォロー中ユーザーID一覧
   
 
@@ -19,72 +65,6 @@ import axios from "axios";
  * - カテゴリ別JSON（src/data/categories/*.json）を自動読み込み・初回のみ投入（重複防止）
  * - Tailwind v4 を想定（index.css に `@import "tailwindcss";`、postcss は `@tailwindcss/postcss`）
  */
-
-/* =========================
-   型定義
-========================= */
-export type QuizType = "choice" | "text";
-export type Visibility = 1 | 2 | 3; // 1:プライベート, 2:フォロワー限定, 3:グローバル
-
-export type QuizPost = {
-  id: string;
-  question: string;
-  type: QuizType;
-  // choice
-  choices?: string[];
-  correctIndex?: number;
-  // text
-  modelAnswer?: string;
-  // 共通
-  note?: string;
-  hashtags: string[];
-  createdAt: number;
-  author_id: number;
-  visibility: Visibility;
-};
-
-// JSONファイルの1問分の型
-export type QuizSeed = {
-  question: string;
-  type: "choice" | "text";
-  choices?: string[];
-  correctIndex?: number;
-  modelAnswer?: string;
-  note?: string;
-  hashtags?: string[];
-};
-
-export type SharePost = {
-  id: string;
-  kind: "share";
-  tag: string;
-  message: string;
-  createdAt: number;
-  likes: number;
-  retweets: number;
-};
-
-export type FeedQuizItem = {
-  id: string;
-  kind: "quiz";
-  data: QuizPost;
-  createdAt: number;
-  likes: number;
-  retweets: number;
-  answers: number;
-};
-
-export type FeedQuizBundleItem = {
-  id: string;
-  kind: "quizBundle";
-  data: QuizPost[]; // まとめて投稿された問題群
-  createdAt: number;
-  likes: number;
-  retweets: number;
-  answers: number;
-};
-
-export type FeedItem = FeedQuizItem | FeedQuizBundleItem | SharePost;
 
 /* =========================
    永続化／ユーティリティ
@@ -178,148 +158,9 @@ const TagChip: React.FC<{
   </button>
 );
 
-const Header: React.FC = () => (
-  <div className="sticky top-0 bg-white/90 backdrop-blur z-20 border-b border-gray-200">
-    <div className="max-w-md mx-auto flex items-center justify-between px-4 h-12">
-      <div className="flex items-center gap-3">
-        <div className="w-8 h-8 rounded-full bg-black flex items-center justify-center text-white font-bold">
-          I
-        </div>
-        <div className="font-bold">Ignos</div>
-      </div>
-      <div className="w-8" />
-    </div>
-  </div>
-);
 // const iconUrl = (name: string) =>
 //   `${import.meta.env.BASE_URL}icons/${name}.png`;
 const iconUrl = (name: string) => `./build/icons/${name}.png`;
-
-const BottomNav: React.FC<{
-  active: string;
-  onHome: () => void;
-  onSearch: () => void;
-  onFolders: () => void;
-  onNotify: () => void;
-  // onPost: () => void;
-  onProfile: () => void;
-}> = ({ active, onHome, onSearch, onFolders, onNotify, onProfile }) => (
-  <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-30">
-    <div className="max-w-md mx-auto grid grid-cols-5 text-xs">
-      <button
-        onClick={onHome}
-        className={`py-3 flex flex-col items-center ${
-          active === "home" ? "text-black" : "text-gray-500"
-        }`}
-        aria-label="ホーム"
-      >
-        <img
-          src={iconUrl("home")}
-          alt="ホーム"
-          className={`w-6 h-6 mb-1 ${
-            active === "home" ? "opacity-100" : "opacity-60"
-          }`}
-        />
-      </button>
-
-      <button
-        onClick={onSearch}
-        className={`py-3 flex flex-col items-center ${
-          active === "search" ? "text-black" : "text-gray-500"
-        }`}
-        aria-label="検索"
-      >
-        <img
-          src={iconUrl("search")}
-          alt="検索"
-          className={`w-6 h-6 mb-1 ${
-            active === "search" ? "opacity-100" : "opacity-60"
-          }`}
-        />
-      </button>
-
-      <button
-        onClick={onFolders}
-        className={`py-3 flex flex-col items-center ${
-          active === "folders" ? "text-black" : "text-gray-500"
-        }`}
-        aria-label="クイズ"
-      >
-        <img
-          src={iconUrl("quiz")}
-          alt="クイズ"
-          className={`w-6 h-6 mb-1 ${
-            active === "folders" ? "opacity-100" : "opacity-60"
-          }`}
-        />
-      </button>
-
-      <button
-        onClick={onNotify}
-        className={`py-3 flex flex-col items-center ${
-          active === "notifications" ? "text-black" : "text-gray-500"
-        }`}
-        aria-label="通知"
-      >
-        <img
-          src={iconUrl("bell")}
-          alt="通知"
-          className={`w-6 h-6 mb-1 ${
-            active === "notifications" ? "opacity-100" : "opacity-60"
-          }`}
-        />
-      </button>
-
-      {/* ▶ ここがプロフィールアイコン ◀ */}
-      <button
-        onClick={onProfile}
-        className={`py-3 flex flex-col items-center ${
-          active === "profile" ? "text-black" : "text-gray-500"
-        }`}
-        aria-label="プロフィール"
-      >
-        <img
-          src={iconUrl("user")} // icons/user.png を用意しておくと◎
-          alt="プロフィール"
-          className={`w-6 h-6 mb-1 ${
-            active === "profile" ? "opacity-100" : "opacity-60"
-          }`}
-        />
-      </button>
-    </div>
-  </nav>
-);
-
-const Modal: React.FC<{
-  open: boolean;
-  onClose: () => void;
-  children: React.ReactNode;
-  // title?: string;  // ← もう使わないなら消してOK
-}> = ({ open, onClose, children }) => {
-  if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-40">
-      {/* 背景（タップで閉じる） */}
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-
-      {/* フルスクリーンのモーダル本体 */}
-      <div
-        className="
-          absolute inset-0
-          max-w-md mx-auto
-          bg-white
-          flex flex-col
-        "
-      >
-        {/* 中身全体は子コンポーネント側（Composer）で構成 */}
-        {children}
-      </div>
-    </div>
-  );
-};
-
-
-
 
 const Composer: React.FC<{
   onCancel: () => void;
@@ -1739,7 +1580,7 @@ useEffect(() => {
 </Modal>
 
       {/* 共有メッセージ編集モーダル */}
-      <Modal open={shareOpen} onClose={() => setShareOpen(false)} title="共有">
+      <Modal open={shareOpen} onClose={() => setShareOpen(false)}>
         <div className="space-y-3">
           <div className="text-sm text-gray-600">
             {shareTag} のフォルダを共有します。メッセージを編集できます。
@@ -1790,7 +1631,7 @@ useEffect(() => {
           />
         </button>
       )}
-      
+
       {/* ボトムナビ */}
       <BottomNav
         active={activeTab}

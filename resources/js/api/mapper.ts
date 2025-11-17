@@ -1,4 +1,5 @@
-import type { QuizPost, FeedItem, Visibility } from "../QuizApp";
+// import type { QuizPost, FeedItem, Visibility } from "../QuizApp";
+import type { QuizPost, FeedItem, Visibility } from "../types/quiz";
 
 // APIの行 → 既存のQuizPostへ
 export const fromQuizRow = (r: {
