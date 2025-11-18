@@ -40,63 +40,58 @@ Route::get('/db-ping', function () {
 
 /* ============================================================
    クイズ API
-   - GET  /api/quizzes        : 一覧取得
+   - GET  /api/quizzes        : 一覧取得（users.display_name を join）
    - POST /api/quizzes/bulk   : まとめて保存（投稿）
 ============================================================ */
 
 /**
  * GET /api/quizzes
  * quizzes テーブルから一覧を取得して JSON で返す
- *
- * quizzes.author_id = users.id を LEFT JOIN して
- * users.display_name を author_display_name として返す
+ * ついでに users.display_name を author_display_name として返す
  */
 Route::get('/quizzes', function (Request $request) {
-    // フロントから ?viewer_id=xxx で渡してもらう
     $viewerId = (int) $request->query('viewer_id', 0);
 
-    // ★ quizzes に users を JOIN して display_name を取得
-    $query = DB::table('quizzes as q')
-        ->leftJoin('users as u', 'u.id', '=', 'q.author_id')
+    $query = DB::table('quizzes')
+        ->leftJoin('users', 'quizzes.author_id', '=', 'users.id')
         ->select(
-            'q.*',
-            DB::raw('u.display_name as author_display_name')
+            'quizzes.*',
+            'users.display_name as author_display_name',
+            'users.ignos_id as author_ignos_id'
         );
 
     if ($viewerId > 0) {
-        // フォロー中ユーザーIDを取得
         $followeeIds = DB::table('follows')
-            ->where('user_id', $viewerId)          // 自分が
-            ->pluck('target_user_id')              // フォローしている相手
+            ->where('user_id', $viewerId)
+            ->pluck('target_user_id')
             ->toArray();
 
-        $query->where(function ($q2) use ($viewerId, $followeeIds) {
-            // ① 自分の投稿は常に表示（visibility に関係なく）
-            $q2->where('q.author_id', $viewerId);
+        $query->where(function ($q) use ($viewerId, $followeeIds) {
 
-            // ② フォロー中ユーザーの投稿で visibility != 1 のもの
+            // ① 自分の投稿は常に表示
+            $q->where('quizzes.author_id', $viewerId);
+
+            // ② フォロー中で visibility != 1
             if (!empty($followeeIds)) {
-                $q2->orWhere(function ($q3) use ($followeeIds) {
-                    $q3->whereIn('q.author_id', $followeeIds)
-                        ->where('q.visibility', '!=', 1); // 1: プライベート以外
+                $q->orWhere(function ($q2) use ($followeeIds) {
+                    $q2->whereIn('quizzes.author_id', $followeeIds)
+                        ->where('quizzes.visibility', '!=', 1);
                 });
             }
         });
     }
 
-    $rows = $query
-        ->orderBy('q.created_at', 'desc')
-        ->get();
+    $rows = $query->orderBy('quizzes.created_at', 'desc')->get();
 
-    // choices, hashtags は JSON 文字列なのでデコード
     $rows = $rows->map(function ($r) {
-        $r->choices  = $r->choices  !== null ? json_decode($r->choices, true)  : null;
+        $r->choices  = $r->choices !== null ? json_decode($r->choices, true) : null;
         $r->hashtags = $r->hashtags !== null ? json_decode($r->hashtags, true) : [];
         return $r;
     });
 
     return response()->json($rows);
 });
+
 
 
 /**
@@ -212,10 +207,11 @@ Route::patch('/feed/{id}', function (Request $request, string $id) {
     return response()->json(['ok' => true]);
 });
 
-/**
- * GET /api/follows?viewer_id=1
- * 指定ユーザーがフォローしているユーザーID一覧を返す
- */
+/* ============================================================
+   フォロー情報 API
+   - GET /api/follows  : viewer_id がフォローしているユーザーID一覧
+============================================================ */
+
 Route::get('/follows', function (Request $request) {
     // クエリパラメータ ?viewer_id=1 を想定
     $viewerId = $request->query('viewer_id');

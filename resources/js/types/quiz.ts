@@ -19,6 +19,7 @@ export type QuizPost = {
 author_id?: number;
   visibility: Visibility;
   authorDisplayName?: string;
+  authorIgnosId?: string | null;
 };
 
 // JSONファイルの1問分の型

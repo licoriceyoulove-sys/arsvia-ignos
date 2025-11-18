@@ -1409,10 +1409,10 @@ const toggleFollow = (targetId: number) => {
       <div className="w-9 h-9 rounded-full bg-gray-300" />
       <div className="flex flex-col items-start">
         <span className="text-sm font-bold">
-  {pickDisplayName(item.data.authorDisplayName, item.data.author_id)}
+  {item.data.authorDisplayName ?? "ゲスト"}
 </span>
         <span className="text-xs text-gray-500">
-          @{item.data.author_id ?? "guest"}
+          @{item.data.authorIgnosId ?? "guest"}
         </span>
       </div>
     </button>
@@ -1461,13 +1461,10 @@ const toggleFollow = (targetId: number) => {
     <div className="w-9 h-9 rounded-full bg-gray-300" />
     <div className="flex flex-col items-start">
       <span className="text-sm font-bold">
-  {pickDisplayName(
-    item.data[0]?.authorDisplayName,
-    item.data[0]?.author_id
-  )}
+  {item.data[0]?.authorDisplayName ?? "ゲスト"}
       </span>
       <span className="text-xs text-gray-500">
-@{item.data[0]?.author_id ?? "guest"}
+@{item.data[0]?.authorIgnosId ?? "guest"}
       </span>
     </div>
   </button>

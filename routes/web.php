@@ -23,10 +23,21 @@ Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
 // ホーム画面（未ログインなら /login へ）
 Route::get('/home', function () {
+    // セッションに uid がなければログインへリダイレクト
     if (!session()->has('uid')) {
         return redirect()->route('login');
     }
-    return view('home', ['name' => session('name')]);
+
+    $uid = session('uid');
+
+    // ログイン中ユーザーを users テーブルから取得
+    // ignos_id や display_name を Blade から参照できるようにする
+    $user = DB::table('users')->where('id', $uid)->first();
+
+    return view('home', [
+        'name' => session('name'),
+        'user' => $user,           // ← これを Blade で使う（$user->ignos_id など）
+    ]);
 });
 
 // ルート（/）に来たら /login へ飛ばす

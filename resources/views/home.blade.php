@@ -12,6 +12,7 @@
   window.Ignos = {
     userId: {{ session('uid') }},
     name: @json(session('name')),
+    ignosId: @json(optional($user)->ignos_id),
   };
 </script>
     {{-- Vite (React) のバンドルを読み込む --}}

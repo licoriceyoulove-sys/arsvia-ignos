@@ -4,7 +4,8 @@ import type { QuizPost } from "../../types/quiz";
 import { TagChip } from "../ui/TagChip";
 import {
   CURRENT_USER_ID,
-  pickDisplayName 
+  pickDisplayName,
+  getCurrentUserIgnosId 
 } from "../../utils/user";
 
 type ProfileTab = "posts" | "revenge" | "thanks" | "bookmarks";
@@ -39,10 +40,22 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     [posts, userId]
   );
 
+  // 何か1件取れればそこから表示名・IGNOS_ID を使う
+const firstPost = myPosts[0];
+
 const displayName = pickDisplayName(
   posts.find((p) => p.author_id === userId)?.authorDisplayName,
   userId
 );
+
+const ignosId =
+  firstPost?.authorIgnosId ??
+  (isMe && getCurrentUserIgnosId()
+    ? getCurrentUserIgnosId()!
+    : userId
+      ? String(userId)
+      : "guest");
+
   // const screenName = getUserScreenName(userId);
 
   const postCount = myPosts.length;
@@ -113,23 +126,6 @@ const displayName = pickDisplayName(
 
   return (
     <div className="bg-white">
-      {/* 上部ナビ（戻る） */}
-      {/* <div className="flex items-center gap-3 px-4 h-12 border-b border-gray-200">
-        <button
-          onClick={onBack}
-          className="text-xl leading-none mr-1"
-          aria-label="戻る"
-        >
-          ←
-        </button>
-        <div className="flex flex-col">
-          <span className="font-bold text-sm">{displayName}</span>
-          <span className="text-xs text-gray-500">
-            {postCount} 件の投稿
-          </span>
-        </div>
-      </div> */}
-
       {/* ヘッダー画像 */}
       <div className="w-full h-24 bg-gray-200" />
 
@@ -139,7 +135,7 @@ const displayName = pickDisplayName(
           <div className="w-20 h-20 rounded-full bg-gray-300 border-4 border-white" />
           <div className="mt-6">
             <div className="font-bold text-lg">{displayName}</div>
-            <div className="text-sm text-gray-500">@{userId}</div>
+            <div className="text-sm text-gray-500">@{ignosId}</div>
           </div>
         </div>
 

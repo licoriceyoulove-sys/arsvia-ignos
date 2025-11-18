@@ -15,8 +15,8 @@ type QuizRowFromApi = {
   created_at: string;
   author_id?: number | null;
   visibility?: number | null;
-  // ★ ここが API 側で JOIN して返している display_name
   author_display_name?: string | null;
+  author_ignos_id?: string | null;
 };
 
 // APIの行 → 既存のQuizPostへ
@@ -36,8 +36,8 @@ export const fromQuizRow = (r: QuizRowFromApi): QuizPost => ({
       ? (r.author_id as number)
       : undefined,
   visibility: (r.visibility as Visibility) ?? 1,
-  // ★ 追加: display_name を保持
   authorDisplayName: r.author_display_name ?? undefined,
+  authorIgnosId: r.author_ignos_id ?? null,
 });
 
 // QuizPost → API行
