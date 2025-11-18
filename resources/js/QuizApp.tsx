@@ -57,7 +57,7 @@ import { SectionTitle } from "./components/ui/SectionTitle";
 import { TagChip } from "./components/ui/TagChip";
 import { ActionBar } from "./components/ui/ActionBar";
 
-import { CURRENT_USER_ID, pickDisplayName } from "./utils/user";
+import { CURRENT_USER_ID, pickDisplayName, getCurrentUserIgnosId } from "./utils/user";
 console.log("DEBUG Current User ID =", CURRENT_USER_ID);
 
 import { ProfileScreen } from "./components/profile/ProfileScreen";
@@ -1264,6 +1264,7 @@ useEffect(() => {
   };
 
   const openProfile = (userId?: number | null) => {
+    console.log("openProfile userId =", userId);
   if (!userId || userId === 0) return;
   setProfileUserId(userId);
   setMode("profile");
@@ -1399,97 +1400,122 @@ const toggleFollow = (targetId: number) => {
               {feed.map((item) => (
                 <div key={item.id} className="py-3 border-b last:border-b-0">
                   {item.kind === "quiz" ? (
-  <>
-    {/* ユーザー行 */}
-    <button
-      type="button"
-      onClick={() => openProfile(item.data.author_id)}
-      className="flex items-center gap-2 mb-2"
-    >
-      <div className="w-9 h-9 rounded-full bg-gray-300" />
-      <div className="flex flex-col items-start">
-        <span className="text-sm font-bold">
-  {item.data.authorDisplayName ?? "ゲスト"}
-</span>
-        <span className="text-xs text-gray-500">
-          @{item.data.authorIgnosId ?? "guest"}
-        </span>
-      </div>
-    </button>
+  (() => {
+    // 表示名とイグノスIDを決定
+    const displayName = pickDisplayName(
+      item.data.authorDisplayName,
+      item.data.author_id
+    );
 
-    <div className="text-[15px] whitespace-pre-wrap mb-2">
-      {item.data.question}
-    </div>
-    <div className="flex flex-wrap mb-2">
-      {item.data.hashtags.map((t) => (
-        <TagChip
-          key={t + item.id}
-          tag={t}
-          onClick={() => startQuiz(t)}
+    const ignosId =
+      item.data.authorIgnosId ??
+      (item.data.author_id === CURRENT_USER_ID && getCurrentUserIgnosId()) ??
+      (item.data.author_id ? String(item.data.author_id) : "guest");
+
+    return (
+      <>
+        {/* ▼ ここ全体がタップできる「ユーザー行」 */}
+        <button
+          type="button"
+          onClick={() => openProfile(item.data.author_id)}
+          className="flex items-center gap-2 mb-2"
+        >
+          {/* アイコン */}
+          <div className="w-9 h-9 rounded-full bg-gray-300" />
+
+          {/* 名前 + イグノスID */}
+          <div className="flex flex-col items-start">
+            <span className="text-sm font-bold">{displayName}</span>
+            <span className="text-xs text-gray-500">@{ignosId}</span>
+          </div>
+        </button>
+        {/* ▲ アイコン or @ignosId をタップ = プロフィールへ */}
+
+        {/* ここから下は今まで通りの投稿内容 */}
+        <div className="text-[15px] whitespace-pre-wrap mb-2">
+          {item.data.question}
+        </div>
+        <div className="flex flex-wrap mb-2">
+          {item.data.hashtags.map((t) => (
+            <TagChip
+              key={t + item.id}
+              tag={t}
+              onClick={() => startQuiz(t)}
+            />
+          ))}
+        </div>
+        <div className="text-xs text-gray-500">
+          {new Date(item.createdAt).toLocaleString()} ・{" "}
+          {item.data.type === "choice" ? "選択肢" : "テキスト入力"}
+        </div>
+        <ActionBar
+          likes={item.likes}
+          retweets={item.retweets}
+          answers={item.answers}
+          onLike={() => incLike(item.id)}
+          onRT={() => incRT(item.id)}
+          onAnswer={() => {
+            incAnswer(item.id);
+            setAnswerPool([item.data]);
+            setMode("answer");
+          }}
         />
-      ))}
-    </div>
-    <div className="text-xs text-gray-500">
-      {new Date(item.createdAt).toLocaleString()} ・{" "}
-      {item.data.type === "choice" ? "選択肢" : "テキスト入力"}
-    </div>
-    <ActionBar
-      likes={item.likes}
-      retweets={item.retweets}
-      answers={item.answers}
-      onLike={() => incLike(item.id)}
-      onRT={() => incRT(item.id)}
-      onAnswer={() => {
-        incAnswer(item.id);
-        setAnswerPool([item.data]);
-        setMode("answer");
-      }}
-    />
-  </>
+      </>
+    );
+  })()
 ) : item.kind === "quizBundle" ? (
-  // ↓このあとに続く quizBundle ブロックを書き換え
+  (() => {
+    const first = item.data[0];
 
-                    <>
-  {/* バンドル投稿のユーザー行（先頭問題の author を利用） */}
-  <button
-    type="button"
-    onClick={() =>
-      openProfile(item.data[0]?.author_id ?? undefined)
-    }
-    className="flex items-center gap-2 mb-2"
-  >
-    <div className="w-9 h-9 rounded-full bg-gray-300" />
-    <div className="flex flex-col items-start">
-      <span className="text-sm font-bold">
-  {item.data[0]?.authorDisplayName ?? "ゲスト"}
-      </span>
-      <span className="text-xs text-gray-500">
-@{item.data[0]?.authorIgnosId ?? "guest"}
-      </span>
-    </div>
-  </button>
+    const displayName = pickDisplayName(
+      first?.authorDisplayName,
+      first?.author_id
+    );
 
-  <div className="text-[15px] whitespace-pre-wrap mb-2">
-    {item.data[0]?.question ?? "クイズ（複数）"}
-  </div>
-  <div className="text-xs text-gray-500 mb-2">
-    全{item.data.length}問
-  </div>
-  <ActionBar
-    likes={item.likes}
-    retweets={item.retweets}
-    answers={item.answers}
-    onLike={() => incLike(item.id)}
-    onRT={() => incRT(item.id)}
-    onAnswer={() => {
-      incAnswer(item.id);
-      setAnswerPool(item.data);
-      setMode("answer");
-    }}
-  />
-</>
+    const ignosId =
+      first?.authorIgnosId ??
+      (first?.author_id === CURRENT_USER_ID && getCurrentUserIgnosId()) ??
+      (first?.author_id ? String(first.author_id) : "guest");
 
-                  ) : (
+    return (
+      <>
+        {/* ▼ 先頭問題のユーザー行：タップでそのユーザーのプロフィール */}
+        <button
+          type="button"
+          onClick={() => openProfile(first?.author_id)}
+          className="flex items-center gap-2 mb-2"
+        >
+          <div className="w-9 h-9 rounded-full bg-gray-300" />
+          <div className="flex flex-col items-start">
+            <span className="text-sm font-bold">{displayName}</span>
+            <span className="text-xs text-gray-500">@{ignosId}</span>
+          </div>
+        </button>
+
+        <div className="text-[15px] whitespace-pre-wrap mb-2">
+          {first?.question ?? "クイズ（複数）"}
+        </div>
+        <div className="text-xs text-gray-500 mb-2">
+          全{item.data.length}問
+        </div>
+        <ActionBar
+          likes={item.likes}
+          retweets={item.retweets}
+          answers={item.answers}
+          onLike={() => incLike(item.id)}
+          onRT={() => incRT(item.id)}
+          onAnswer={() => {
+            incAnswer(item.id);
+            setAnswerPool(item.data);
+            setMode("answer");
+          }}
+        />
+      </>
+    );
+  })()
+) : (
+  /* share の描画はそのままでOK */
+
                     <>
                       <div className="text-[15px] whitespace-pre-wrap mb-2">
                         {item.message}

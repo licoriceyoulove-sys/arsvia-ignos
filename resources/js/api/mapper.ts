@@ -13,32 +13,38 @@ type QuizRowFromApi = {
   note?: string | null;
   hashtags: string[];
   created_at: string;
-  author_id?: number | null;
+  author_id?: number | string | null;
   visibility?: number | null;
   author_display_name?: string | null;
   author_ignos_id?: string | null;
 };
 
 // APIの行 → 既存のQuizPostへ
-export const fromQuizRow = (r: QuizRowFromApi): QuizPost => ({
-  id: r.id,
-  question: r.question,
-  type: r.type,
-  choices: r.choices ?? undefined,
-  correctIndex:
-    typeof r.correct_index === "number" ? r.correct_index : undefined,
-  modelAnswer: r.model_answer ?? undefined,
-  note: r.note ?? undefined,
-  hashtags: r.hashtags,
-  createdAt: new Date(r.created_at).getTime(),
-  author_id:
-    typeof r.author_id === "number"
-      ? (r.author_id as number)
-      : undefined,
-  visibility: (r.visibility as Visibility) ?? 1,
-  authorDisplayName: r.author_display_name ?? undefined,
-  authorIgnosId: r.author_ignos_id ?? null,
-});
+export const fromQuizRow = (r: QuizRowFromApi): QuizPost => {
+  // ★ author_id を number に統一
+  const authorId =
+    r.author_id === null || r.author_id === undefined || r.author_id === ""
+      ? undefined
+      : Number(r.author_id);
+
+  return {
+    id: r.id,
+    question: r.question,
+    type: r.type,
+    choices: r.choices ?? undefined,
+    correctIndex:
+      typeof r.correct_index === "number" ? r.correct_index : undefined,
+    modelAnswer: r.model_answer ?? undefined,
+    note: r.note ?? undefined,
+    hashtags: r.hashtags,
+    createdAt: new Date(r.created_at).getTime(),
+    author_id: authorId,
+    visibility: (r.visibility as Visibility) ?? 1,
+    // JOIN で取ってきた display_name / ignos_id
+    authorDisplayName: r.author_display_name ?? undefined,
+    authorIgnosId: r.author_ignos_id ?? undefined,
+  };
+};
 
 // QuizPost → API行
 export const toQuizRow = (p: QuizPost) => ({
