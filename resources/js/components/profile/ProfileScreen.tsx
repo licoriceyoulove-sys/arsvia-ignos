@@ -4,8 +4,7 @@ import type { QuizPost } from "../../types/quiz";
 import { TagChip } from "../ui/TagChip";
 import {
   CURRENT_USER_ID,
-  getUserDisplayName,
-  getUserScreenName,
+  pickDisplayName 
 } from "../../utils/user";
 
 type ProfileTab = "posts" | "revenge" | "thanks" | "bookmarks";
@@ -40,8 +39,11 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     [posts, userId]
   );
 
-  const displayName = getUserDisplayName(userId);
-  const screenName = getUserScreenName(userId);
+const displayName = pickDisplayName(
+  posts.find((p) => p.author_id === userId)?.authorDisplayName,
+  userId
+);
+  // const screenName = getUserScreenName(userId);
 
   const postCount = myPosts.length;
 
@@ -112,7 +114,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   return (
     <div className="bg-white">
       {/* 上部ナビ（戻る） */}
-      <div className="flex items-center gap-3 px-4 h-12 border-b border-gray-200">
+      {/* <div className="flex items-center gap-3 px-4 h-12 border-b border-gray-200">
         <button
           onClick={onBack}
           className="text-xl leading-none mr-1"
@@ -126,7 +128,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
             {postCount} 件の投稿
           </span>
         </div>
-      </div>
+      </div> */}
 
       {/* ヘッダー画像 */}
       <div className="w-full h-24 bg-gray-200" />
@@ -137,7 +139,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           <div className="w-20 h-20 rounded-full bg-gray-300 border-4 border-white" />
           <div className="mt-6">
             <div className="font-bold text-lg">{displayName}</div>
-            <div className="text-sm text-gray-500">@{screenName}</div>
+            <div className="text-sm text-gray-500">@{userId}</div>
           </div>
         </div>
 

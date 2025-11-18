@@ -57,7 +57,7 @@ import { SectionTitle } from "./components/ui/SectionTitle";
 import { TagChip } from "./components/ui/TagChip";
 import { ActionBar } from "./components/ui/ActionBar";
 
-import { CURRENT_USER_ID, getUserDisplayName, getUserScreenName } from "./utils/user";
+import { CURRENT_USER_ID, pickDisplayName } from "./utils/user";
 console.log("DEBUG Current User ID =", CURRENT_USER_ID);
 
 import { ProfileScreen } from "./components/profile/ProfileScreen";
@@ -1409,10 +1409,10 @@ const toggleFollow = (targetId: number) => {
       <div className="w-9 h-9 rounded-full bg-gray-300" />
       <div className="flex flex-col items-start">
         <span className="text-sm font-bold">
-          {getUserDisplayName(item.data.author_id)}
-        </span>
+  {pickDisplayName(item.data.authorDisplayName, item.data.author_id)}
+</span>
         <span className="text-xs text-gray-500">
-          @{getUserScreenName(item.data.author_id)}
+          @{item.data.author_id ?? "guest"}
         </span>
       </div>
     </button>
@@ -1461,10 +1461,13 @@ const toggleFollow = (targetId: number) => {
     <div className="w-9 h-9 rounded-full bg-gray-300" />
     <div className="flex flex-col items-start">
       <span className="text-sm font-bold">
-        {getUserDisplayName(item.data[0]?.author_id)}
+  {pickDisplayName(
+    item.data[0]?.authorDisplayName,
+    item.data[0]?.author_id
+  )}
       </span>
       <span className="text-xs text-gray-500">
-        @{getUserScreenName(item.data[0]?.author_id)}
+@{item.data[0]?.author_id ?? "guest"}
       </span>
     </div>
   </button>
