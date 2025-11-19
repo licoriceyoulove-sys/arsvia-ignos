@@ -34,9 +34,12 @@
 
 
 import React, { useEffect, useMemo, useState } from "react";
-import { getQuizzes } from "./api/client";
+// import { getQuizzes } from "./api/client";
+
 import { fromQuizRow } from "./api/mapper";
-import { bulkUpsertQuizzes, postFeed, patchFeed, API_BASE } from "./api/client";
+// import { bulkUpsertQuizzes, postFeed, patchFeed, API_BASE } from "./api/client";
+import { getQuizzes, getUserQuizzes, bulkUpsertQuizzes, postFeed, patchFeed, API_BASE, searchUsers } from "./api/client";
+import type { UserSearchResult } from "./api/client";
 import { toQuizRow, toFeedRow } from "./api/mapper";
 import axios from "axios";
 import type {
@@ -1088,6 +1091,13 @@ export default function QuizApp() {
   >("home");
   const [answerPool, setAnswerPool] = useState<QuizPost[] | null>(null);
   const [hasApiData, setHasApiData] = useState(false);
+  
+  // 検索（ユーザー）関連 state
+const [userKeyword, setUserKeyword] = useState<string>("");
+const [userResults, setUserResults] = useState<UserSearchResult[]>([]);
+const [userSearching, setUserSearching] = useState(false);
+const [userSearchError, setUserSearchError] = useState<string | null>(null);
+
   // 共有モーダル
   const [shareOpen, setShareOpen] = useState(false);
   const [shareTag, setShareTag] = useState<string>("");
@@ -1095,22 +1105,9 @@ export default function QuizApp() {
   const [followIds, setFollowIds] = useState<number[]>([]);
   const [profileUserId, setProfileUserId] = useState<number | null>(null);
   // フォロー中ユーザーID一覧
-  // const [followIds, setFollowIds] = useState<number[]>([]);
-
-  //   useEffect(() => {
-  //   (async () => {
-  //     try {
-  //       const res = await axios.get("/api/following-ids");
-  //       const ids: number[] = res.data?.ids ?? [];
-  //       setFollowIds(ids);
-  //       console.log("DEBUG followIds =", ids);
-  //     } catch (e) {
-  //       console.error("following-ids fetch failed", e);
-  //     }
-  //   })();
-  // }, []);
-// client.ts と同じように API_BASE を使うなら、先頭で import しておいてください。
-// 例: import { API_BASE } from "./api/client";
+const [profilePosts, setProfilePosts] = useState<QuizPost[]>([]);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
 
 useEffect(() => {
   if (!CURRENT_USER_ID) return; // 未ログインなら何もしない
@@ -1263,12 +1260,54 @@ useEffect(() => {
     setMode("quiz");
   };
 
-  const openProfile = (userId?: number | null) => {
-    console.log("openProfile userId =", userId);
+const openProfile = async (userId?: number | null) => {
+  console.log("openProfile userId =", userId);
   if (!userId || userId === 0) return;
+
   setProfileUserId(userId);
   setMode("profile");
+
+  setProfileLoading(true);
+  setProfileError(null);
+  setProfilePosts([]); // 前の結果を一旦クリア
+
+  try {
+    // ★ 閲覧者に関係なく「userId の投稿」を全部返す API を叩く
+    const rows = await getUserQuizzes(userId);
+    const apiPosts: QuizPost[] = rows.map(fromQuizRow);
+
+    setProfilePosts(apiPosts);
+  } catch (e) {
+    console.error("getUserQuizzes failed", e);
+    setProfileError("このユーザーの投稿取得に失敗しました");
+    setProfilePosts([]);
+  } finally {
+    setProfileLoading(false);
+  }
 };
+
+const handleUserSearch = async () => {
+  const q = userKeyword.trim();
+  if (!q) {
+    setUserResults([]);
+    setUserSearchError(null);
+    return;
+  }
+
+  setUserSearching(true);
+  setUserSearchError(null);
+
+  try {
+    const users = await searchUsers(q);
+    setUserResults(users);
+  } catch (e) {
+    console.error(e);
+    setUserSearchError("ユーザー検索に失敗しました");
+  } finally {
+    setUserSearching(false);
+  }
+};
+
 
 const toggleFollow = (targetId: number) => {
   setFollowIds((prev) =>
@@ -1569,15 +1608,72 @@ const toggleFollow = (targetId: number) => {
           />
         )}
 
-        {/* SEARCH（プレースホルダー） */}
-        {mode === "search" && (
-          <Card>
-            <SectionTitle title="検索" />
-            <div className="px-4 pb-4 text-sm text-gray-600">
-              今後ここでタグや問題文を検索できます。
+{/* SEARCH：ユーザー検索 */}
+{mode === "search" && (
+  <Card>
+    <SectionTitle title="ユーザー検索" />
+    <div className="px-4 pb-4 space-y-3">
+
+      {/* 検索フォーム */}
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={userKeyword}
+          onChange={(e) => setUserKeyword(e.target.value)}
+          placeholder="ユーザー名 / イグノスID を検索"
+          className="flex-1 px-3 py-2 border rounded-xl text-sm bg-gray-50 border-gray-200"
+        />
+        <button
+          type="button"
+          onClick={handleUserSearch}
+          className="px-4 py-2 rounded-xl bg-black text-white text-sm font-bold"
+        >
+          検索
+        </button>
+      </div>
+
+      {userSearchError && (
+        <div className="text-xs text-red-500">{userSearchError}</div>
+      )}
+
+      {userSearching && (
+        <div className="text-sm text-gray-500">検索中です…</div>
+      )}
+
+      {/* 検索結果リスト */}
+      <div className="divide-y divide-gray-200">
+        {userResults.map((u) => {
+          const displayName = u.display_name || "ゲスト";
+          const ignosId = u.ignos_id || String(u.id);
+
+          return (
+            <button
+              key={u.id}
+              type="button"
+              onClick={() => openProfile(u.id)}
+              className="w-full flex items-center gap-3 py-3 text-left"
+            >
+              <div className="w-9 h-9 rounded-full bg-gray-300" />
+              <div className="flex flex-col items-start">
+                <span className="text-sm font-bold">{displayName}</span>
+                <span className="text-xs text-gray-500">@{ignosId}</span>
+              </div>
+            </button>
+          );
+        })}
+
+        {!userSearching &&
+          userKeyword.trim() !== "" &&
+          userResults.length === 0 && (
+            <div className="py-3 text-sm text-gray-500">
+              該当するユーザーが見つかりませんでした。
             </div>
-          </Card>
-        )}
+          )}
+      </div>
+    </div>
+  </Card>
+)}
+
 
         {/* NOTIFICATIONS（プレースホルダー） */}
         {mode === "notifications" && (
@@ -1589,20 +1685,42 @@ const toggleFollow = (targetId: number) => {
           </Card>
         )}
 
-                {/* PROFILE */}
-        {mode === "profile" && profileUserId !== null && (
-          <ProfileScreen
-            userId={profileUserId}
-            posts={posts}
-            isFollowing={followIds.includes(profileUserId)}
-            followingCount={
-              profileUserId === CURRENT_USER_ID ? followIds.length : 0
-            }
-            followerCount={0 /* TODO: API 連携で正確な数に */}
-            onToggleFollow={() => toggleFollow(profileUserId)}
-            onBack={() => setMode("home")}
-          />
-        )}
+        {/* PROFILE */}
+{mode === "profile" && profileUserId !== null && (
+  <>
+    {profileLoading && (
+      <Card>
+        <div className="px-4 py-4 text-sm text-gray-500">
+          プロフィールを読み込み中です…
+        </div>
+      </Card>
+    )}
+
+    {profileError && !profileLoading && (
+      <Card>
+        <div className="px-4 py-4 text-sm text-red-500">
+          {profileError}
+        </div>
+      </Card>
+    )}
+
+    {!profileLoading && !profileError && (
+      <ProfileScreen
+        userId={profileUserId}
+        // ★ ここが一番大事：プロフィール専用投稿一覧を渡す
+        posts={profilePosts}
+        isFollowing={followIds.includes(profileUserId)}
+        followingCount={
+          profileUserId === CURRENT_USER_ID ? followIds.length : 0
+        }
+        followerCount={0 /* TODO: API 連携で正確な数に */}
+        onToggleFollow={() => toggleFollow(profileUserId)}
+        onBack={() => setMode("home")}
+      />
+    )}
+  </>
+)}
+
 
 
         <div className="h-4" />

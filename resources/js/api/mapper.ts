@@ -3,7 +3,7 @@
 import type { QuizPost, FeedItem, Visibility } from "../types/quiz";
 
 // API の quizzes 行の型
-type QuizRowFromApi = {
+export type QuizRowFromApi = {
   id: string;
   question: string;
   type: "choice" | "text";

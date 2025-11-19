@@ -4,6 +4,7 @@
 const RAW_BASE = import.meta.env.VITE_API_BASE || "/api";
 export const API_BASE = (RAW_BASE as string).replace(/\/$/, "");
 console.log("VITE_API_BASE =", API_BASE);
+import type { QuizRowFromApi } from "./mapper";
 
 // 共通: fetch 失敗時にサーバの応答も添えて投げる
 const assertOk = async (res: Response, label: string) => {
@@ -54,15 +55,6 @@ export async function getMe() {
 /* =========================================
    クイズ/フィード
 ========================================= */
-// export async function getQuizzes(viewerId?: number | null) {
-//   const param = viewerId ? `?viewer_id=${encodeURIComponent(String(viewerId))}` : "";
-//   const res = await fetch(`${API_BASE}/quizzes${param}`, {
-//     cache: "no-store",
-//     credentials: "include",
-//   });
-//   await assertOk(res, "getQuizzes");
-//   return res.json(); // 配列
-// }
 export async function getQuizzes(viewerId?: number) {
   const param =
     viewerId && viewerId > 0
@@ -78,6 +70,18 @@ export async function getQuizzes(viewerId?: number) {
   return res.json();
 }
 
+// ★ 追加：プロフィール用「特定ユーザーのクイズ一覧」
+export async function getUserQuizzes(
+  userId: number
+): Promise<QuizRowFromApi[]> {
+  const res = await fetch(`${API_BASE}/users/${userId}/quizzes`, {
+    cache: "no-store",
+    credentials: "include",
+  });
+  await assertOk(res, "getUserQuizzes");
+  return res.json() as Promise<QuizRowFromApi[]>;
+}
+
 export async function bulkUpsertQuizzes(rows: any[]) {
   const res = await fetch(`${API_BASE}/quizzes/bulk`, {
     method: "POST",
@@ -88,6 +92,28 @@ export async function bulkUpsertQuizzes(rows: any[]) {
   await assertOk(res, "bulkUpsertQuizzes");
 }
 
+export type UserSearchResult = {
+  id: number;
+  display_name: string | null;
+  ignos_id: string | null;
+};
+
+export const searchUsers = async (keyword: string): Promise<UserSearchResult[]> => {
+  const q = keyword.trim();
+  if (!q) return [];
+
+  const res = await fetch(
+    `${API_BASE}/users/search?q=${encodeURIComponent(q)}`,
+    { credentials: "include" }
+  );
+
+  if (!res.ok) {
+    throw new Error("ユーザー検索 API エラー");
+  }
+
+  const json = await res.json();
+  return (json.users ?? []) as UserSearchResult[];
+};
 export async function postFeed(item: any) {
   const res = await fetch(`${API_BASE}/feed`, {
     method: "POST",

@@ -147,6 +147,27 @@ Route::post('/quizzes/bulk', function (Request $request) {
     return response()->json(['ok' => true]);
 })->withoutMiddleware(\App\Http\Middleware\VerifyCsrfToken::class);
 
+// ★ 追加: 指定ユーザーの投稿一覧（プロフィール用）
+Route::get('/users/{id}/quizzes', function (int $id) {
+    $rows = DB::table('quizzes')
+        ->leftJoin('users', 'quizzes.author_id', '=', 'users.id')
+        ->select(
+            'quizzes.*',
+            'users.display_name as author_display_name',
+            'users.ignos_id as author_ignos_id'
+        )
+        ->where('quizzes.author_id', $id)
+        ->orderBy('quizzes.created_at', 'desc')
+        ->get();
+
+    $rows = $rows->map(function ($r) {
+        $r->choices  = $r->choices !== null ? json_decode($r->choices, true) : null;
+        $r->hashtags = $r->hashtags !== null ? json_decode($r->hashtags, true) : [];
+        return $r;
+    });
+
+    return response()->json($rows);
+});
 /* ============================================================
    フィード API
    - POST   /api/feed       : フィード1件保存
@@ -233,5 +254,36 @@ Route::get('/follows', function (Request $request) {
 
     return response()->json([
         'ids' => $ids,   // 例: [2, 5, 10]
+    ]);
+});
+
+/* ============================================================
+   ユーザー検索 API
+   - GET /api/users/search?q=キーワード
+   - 対象: users.display_name / users.ignos_id の部分一致
+============================================================ */
+
+Route::get('/users/search', function (Request $request) {
+    $q = trim((string) $request->query('q', ''));
+
+    if ($q === '') {
+        return response()->json([
+            'users' => [],
+        ]);
+    }
+
+    $users = DB::table('users')
+        ->select('id', 'display_name', 'ignos_id')
+        ->where(function ($query) use ($q) {
+            $like = '%' . $q . '%';
+            $query->where('display_name', 'LIKE', $like)
+                  ->orWhere('ignos_id', 'LIKE', $like);
+        })
+        ->orderBy('id')
+        ->limit(50)
+        ->get();
+
+    return response()->json([
+        'users' => $users,
     ]);
 });
