@@ -267,6 +267,57 @@ Route::get('/follows', function (Request $request) {
     ]);
 });
 
+Route::post('/follows/toggle', function (Request $request) {
+    $userId   = (int) $request->input('user_id');
+    $targetId = (int) $request->input('target_user_id');
+
+    if ($userId <= 0 || $targetId <= 0) {
+        return response()->json([
+            'ok' => false,
+            'message' => 'user_id と target_user_id は必須です',
+        ], 422);
+    }
+
+    if ($userId === $targetId) {
+        return response()->json([
+            'ok' => false,
+            'message' => '自分自身はフォローできません',
+        ], 400);
+    }
+
+    // 既にフォローしているか？
+    $exists = DB::table('follows')
+        ->where('user_id', $userId)
+        ->where('target_user_id', $targetId)
+        ->exists();
+
+    if ($exists) {
+        // すでにフォローしている → 解除
+        DB::table('follows')
+            ->where('user_id', $userId)
+            ->where('target_user_id', $targetId)
+            ->delete();
+
+        return response()->json([
+            'ok' => true,
+            'following' => false, // 解除された
+        ]);
+    } else {
+        // まだフォローしていない → 新規フォロー
+        $now = now();
+        DB::table('follows')->insert([
+            'user_id'        => $userId,
+            'target_user_id' => $targetId,
+            // 'created_at'     => $now,
+            // 'updated_at'     => $now,
+        ]);
+
+        return response()->json([
+            'ok' => true,
+            'following' => true, // フォローされた
+        ]);
+    }
+});
 /* ============================================================
    ユーザー検索 API
    - GET /api/users/search?q=キーワード
@@ -297,3 +348,37 @@ Route::get('/users/search', function (Request $request) {
         'users' => $users,
     ]);
 });
+
+// ★ プロフィール用フォローカウント + フォロー状態API
+Route::get('/users/{id}/follow-stats', function (Request $request, int $id) {
+
+    // プロフィールを見ている人（ログイン中ユーザー）※未ログインなら 0
+    $viewerId = (int) $request->query('viewer_id', 0);
+
+    // フォロー数（このユーザーがフォローしている人数）
+    $followingCount = DB::table('follows')
+        ->where('user_id', $id)
+        ->count();
+
+    // フォロワー数（このユーザーをフォローしている人数）
+    $followerCount = DB::table('follows')
+        ->where('target_user_id', $id)
+        ->count();
+
+    // viewer がこのユーザーをフォローしているか？
+    $isFollowing = false;
+    if ($viewerId > 0) {
+        $isFollowing = DB::table('follows')
+            ->where('user_id', $viewerId)
+            ->where('target_user_id', $id)
+            ->exists();
+    }
+
+    return response()->json([
+        'user_id'          => $id,
+        'following_count'  => $followingCount,
+        'follower_count'   => $followerCount,
+        'is_following'     => $isFollowing,
+    ]);
+});
+

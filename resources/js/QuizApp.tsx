@@ -1126,7 +1126,9 @@ const [userSearchError, setUserSearchError] = useState<string | null>(null);
 const [profilePosts, setProfilePosts] = useState<QuizPost[]>([]);
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
-
+const [profileFollowingCount, setProfileFollowingCount] = useState(0);
+const [profileFollowerCount, setProfileFollowerCount] = useState(0);
+const [profileIsFollowing, setProfileIsFollowing] = useState(false);
 useEffect(() => {
   if (!CURRENT_USER_ID) return; // 未ログインなら何もしない
 
@@ -1223,46 +1225,6 @@ useEffect(() => {
   })();
 }, []);
 
-
-  // useEffect(() => {
-  //   const ac = new AbortController();
-  //   (async () => {
-  //     try {
-  //       const rows = await getQuizzes(CURRENT_USER_ID);
-  //       const apiPosts: QuizPost[] = rows.map(fromQuizRow);
-
-  //       // ★ APIにデータがあればフラグON
-  //       if (apiPosts.length > 0) setHasApiData(true);
-
-  //       setPosts((prev) => {
-  //         const seen = new Set(prev.map((p) => p.id));
-  //         const merged = [...prev];
-  //         for (const p of apiPosts) if (!seen.has(p.id)) merged.push(p);
-  //         return merged;
-  //       });
-
-  //       setFeed((prev) => {
-  //         const have = new Set(prev.map((f) => f.id));
-  //         const add = apiPosts
-  //           .filter((p) => !have.has(p.id))
-  //           .map((p) => ({
-  //             id: p.id,
-  //             kind: "quiz" as const,
-  //             data: p,
-  //             createdAt: p.createdAt,
-  //             likes: 0,
-  //             retweets: 0,
-  //             answers: 0,
-  //           }));
-  //         return add.length ? [...add, ...prev] : prev;
-  //       });
-  //     } catch (e) {
-  //       console.error("API init failed", e);
-  //     }
-  //   })();
-  //   return () => ac.abort();
-  // }, []);
-
   useEffect(() => {
     (async () => {
       try {
@@ -1273,49 +1235,6 @@ useEffect(() => {
       }
     })();
   }, []);
-
-  // ② APIから取得して重複なしでマージ
-  // useEffect(() => {
-  //   const ac = new AbortController();
-  //   (async () => {
-  //     try {
-
-  //       // const apiPosts = rows.map(fromQuizRow);
-  //       const rows = await getQuizzes(CURRENT_USER_ID);
-  //       // ここを明示的に型付け
-  //       const apiPosts: QuizPost[] = rows.map(fromQuizRow);
-  //       setPosts((prev) => {
-  //         const seen = new Set(prev.map((p) => p.id));
-  //         const merged = [...prev];
-  //         for (const p of apiPosts) if (!seen.has(p.id)) merged.push(p);
-  //         return merged;
-  //       });
-
-  //       setFeed((prev) => {
-  //         const have = new Set(prev.map((f) => f.id));
-  //         const add = apiPosts
-  //           .filter((p) => !have.has(p.id))
-  //           .map((p) => ({
-  //             id: p.id,
-  //             kind: "quiz" as const,
-  //             data: p,
-  //             createdAt: p.createdAt,
-  //             likes: 0,
-  //             retweets: 0,
-  //             answers: 0,
-  //           }));
-  //         return add.length ? [...add, ...prev] : prev;
-  //       });
-  //     } catch (e) {
-  //       console.error("API init failed", e);
-  //     }
-  //   })();
-  //   return () => ac.abort();
-  // }, []);
-
-  // ③ 変更があったらローカルへ保存（この2本だけでOK）
-  // useEffect(() => savePosts(posts), [posts]);
-  // useEffect(() => saveFeed(feed), [feed]);
 
   const startQuiz = (tag: string) => {
     setSelectedTag(tag);
@@ -1331,22 +1250,54 @@ const openProfile = async (userId?: number | null) => {
 
   setProfileLoading(true);
   setProfileError(null);
-  setProfilePosts([]); // 前の結果を一旦クリア
-
+  setProfilePosts([]);
+  setProfileFollowingCount(0);
+  setProfileFollowerCount(0);
+setProfileIsFollowing(false);
   try {
-    // ★ 閲覧者に関係なく「userId の投稿」を全部返す API を叩く
+    // ① プロフィール対象ユーザーの投稿取得
     const rows = await getUserQuizzes(userId);
     const apiPosts: QuizPost[] = rows.map(fromQuizRow);
-
     setProfilePosts(apiPosts);
+
+    // ② フォロー数／フォロワー数/フォロー状態
+        const statsRes = await fetch(
+      `${API_BASE}/users/${userId}/follow-stats?viewer_id=${CURRENT_USER_ID ?? 0}`,
+      {
+        credentials: "include",
+        headers: { "X-Requested-With": "XMLHttpRequest" },
+      }
+    );
+    if (statsRes.ok) {
+      const json = await statsRes.json();
+      setProfileFollowingCount(json.following_count);
+      setProfileFollowerCount(json.follower_count);
+      setProfileIsFollowing(!!json.is_following);
+    }
+
+    // ③ 自分の followIds も最新にしておく（ここがポイント）
+    // if (CURRENT_USER_ID) {
+    //   const followsRes = await fetch(
+    //     `${API_BASE}/follows?viewer_id=${encodeURIComponent(
+    //       String(CURRENT_USER_ID)
+    //     )}`,
+    //     { credentials: "include", headers: { "X-Requested-With": "XMLHttpRequest" } }
+    //   );
+    //   if (followsRes.ok) {
+    //     const json = await followsRes.json();
+    //     const ids: number[] = json.ids ?? [];
+    //     setFollowIds(ids);
+    //   }
+    // }
+
   } catch (e) {
-    console.error("getUserQuizzes failed", e);
-    setProfileError("このユーザーの投稿取得に失敗しました");
-    setProfilePosts([]);
+    console.error("openProfile failed", e);
+    setProfileError("プロフィール情報の取得に失敗しました");
   } finally {
     setProfileLoading(false);
   }
 };
+
 
 const handleUserSearch = async () => {
   const q = userKeyword.trim();
@@ -1371,13 +1322,54 @@ const handleUserSearch = async () => {
 };
 
 
-const toggleFollow = (targetId: number) => {
-  setFollowIds((prev) =>
-    prev.includes(targetId)
-      ? prev.filter((id) => id !== targetId)
-      : [...prev, targetId]
-  );
+const toggleFollow = async (targetId: number) => {
+  if (!CURRENT_USER_ID || !targetId) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/follows/toggle`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Requested-With": "XMLHttpRequest",
+      },
+      credentials: "include",
+      body: JSON.stringify({
+        user_id: CURRENT_USER_ID,
+        target_user_id: targetId,
+      }),
+    });
+
+    if (!res.ok) {
+      console.error("toggleFollow failed status =", res.status);
+      return;
+    }
+
+    const json = await res.json();
+    const following: boolean = !!json.following;
+
+    // フィード絞り込み用 followIds を更新
+    setFollowIds((prev) => {
+      if (following) {
+        if (prev.includes(targetId)) return prev;
+        return [...prev, targetId];
+      } else {
+        return prev.filter((id) => id !== targetId);
+      }
+    });
+
+    // ★ 今見ているプロフィールがこの targetId なら、プロフィール側の表示も更新
+    if (profileUserId === targetId) {
+      setProfileIsFollowing(following);
+      setProfileFollowerCount((prev) =>
+        following ? prev + 1 : Math.max(0, prev - 1)
+      );
+    }
+  } catch (e) {
+    console.error("toggleFollow failed", e);
+  }
 };
+
+
 
   const backToFolders = () => setMode("folders");
 
@@ -1800,18 +1792,17 @@ const toggleFollow = (targetId: number) => {
     )}
 
     {!profileLoading && !profileError && (
-      <ProfileScreen
-        userId={profileUserId}
-        // ★ ここが一番大事：プロフィール専用投稿一覧を渡す
-        posts={profilePosts}
-        isFollowing={followIds.includes(profileUserId)}
-        followingCount={
-          profileUserId === CURRENT_USER_ID ? followIds.length : 0
-        }
-        followerCount={0 /* TODO: API 連携で正確な数に */}
-        onToggleFollow={() => toggleFollow(profileUserId)}
-        onBack={() => setMode("home")}
-      />
+<ProfileScreen
+  userId={profileUserId}
+  posts={profilePosts}
+  isFollowing={profileIsFollowing}
+  followingCount={profileFollowingCount}
+  followerCount={profileFollowerCount}
+  onToggleFollow={() => toggleFollow(profileUserId)}
+  onBack={() => setMode("home")}
+/>
+
+
     )}
   </>
 )}
