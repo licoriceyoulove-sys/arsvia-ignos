@@ -1108,7 +1108,7 @@ export default function QuizApp() {
     "home" | "folders" | "quiz" | "search" | "notifications" | "answer"  | "profile"
   >("home");
   const [answerPool, setAnswerPool] = useState<QuizPost[] | null>(null);
-  const [hasApiData, setHasApiData] = useState(false);
+  // const [hasApiData, setHasApiData] = useState(false);
   
   // 検索（ユーザー）関連 state
 const [userKeyword, setUserKeyword] = useState<string>("");
@@ -1129,6 +1129,79 @@ const [profilePosts, setProfilePosts] = useState<QuizPost[]>([]);
 const [profileFollowingCount, setProfileFollowingCount] = useState(0);
 const [profileFollowerCount, setProfileFollowerCount] = useState(0);
 const [profileIsFollowing, setProfileIsFollowing] = useState(false);
+
+// QuizApp コンポーネント内
+
+const loadQuizzesAndFeed = async () => {
+  try {
+    const rows = await getQuizzes(CURRENT_USER_ID);
+    const apiPosts: QuizPost[] = rows.map(fromQuizRow);
+
+    setPosts(apiPosts);
+const authorSummary = apiPosts.reduce<Record<number, number>>((acc, p) => {
+  const id = p.author_id ?? -1; // author_id が undefined の場合は -1 カウント
+  acc[id] = (acc[id] ?? 0) + 1;
+  return acc;
+}, {});
+
+console.log("DEBUG /quizzes author summary =", authorSummary);
+
+    // ここから feed を構築（今 useEffect に書いてあるロジックをそのまま移動）
+    const byBundle = new Map<string, QuizPost[]>();
+    const singles: QuizPost[] = [];
+
+    for (const p of apiPosts) {
+      if (p.bundleId) {
+        const key = p.bundleId;
+        const list = byBundle.get(key) ?? [];
+        list.push(p);
+        byBundle.set(key, list);
+      } else {
+        singles.push(p);
+      }
+    }
+
+    const feedItems: FeedItem[] = [];
+
+    for (const [bundleId, postsInBundle] of byBundle) {
+      if (postsInBundle.length >= 2) {
+        postsInBundle.sort((a, b) => a.bundleOrder - b.bundleOrder);
+
+        const createdAt = postsInBundle[0].createdAt;
+        feedItems.push({
+          id: `bundle_${bundleId}`,
+          kind: "quizBundle",
+          data: postsInBundle,
+          createdAt,
+          likes: 0,
+          retweets: 0,
+          answers: 0,
+        });
+      } else {
+        singles.push(postsInBundle[0]);
+      }
+    }
+
+    for (const p of singles) {
+      feedItems.push({
+        id: p.id,
+        kind: "quiz",
+        data: p,
+        createdAt: p.createdAt,
+        likes: 0,
+        retweets: 0,
+        answers: 0,
+      });
+    }
+
+    feedItems.sort((a, b) => b.createdAt - a.createdAt);
+    setFeed(feedItems);
+  } catch (e) {
+    console.error("API /quizzes 取得に失敗しました", e);
+  }
+};
+
+
 useEffect(() => {
   if (!CURRENT_USER_ID) return; // 未ログインなら何もしない
 
@@ -1157,73 +1230,76 @@ useEffect(() => {
 }, []);
 
 useEffect(() => {
-  (async () => {
-    try {
-      const rows = await getQuizzes(CURRENT_USER_ID);
-      const apiPosts: QuizPost[] = rows.map(fromQuizRow);
-
-      setPosts(apiPosts);
-
-      // ここから feed を構築
-      const byBundle = new Map<string, QuizPost[]>();
-      const singles: QuizPost[] = [];
-
-      for (const p of apiPosts) {
-        if (p.bundleId) {
-          const key = p.bundleId;
-          const list = byBundle.get(key) ?? [];
-          list.push(p);
-          byBundle.set(key, list);
-        } else {
-          singles.push(p);
-        }
-      }
-
-      const feedItems: FeedItem[] = [];
-
-      // 2問以上ある bundle は quizBundle として扱う
-      for (const [bundleId, postsInBundle] of byBundle) {
-        if (postsInBundle.length >= 2) {
-          postsInBundle.sort((a, b) => a.bundleOrder - b.bundleOrder);
-
-          const createdAt = postsInBundle[0].createdAt;
-          feedItems.push({
-            id: `bundle_${bundleId}`,
-            kind: "quizBundle",
-            data: postsInBundle,
-            createdAt,
-            likes: 0,
-            retweets: 0,
-            answers: 0,
-          });
-        } else {
-          // 1問しかない bundle は単発扱いに回す
-          singles.push(postsInBundle[0]);
-        }
-      }
-
-      // 単発のクイズ投稿
-      for (const p of singles) {
-        feedItems.push({
-          id: p.id,
-          kind: "quiz",
-          data: p,
-          createdAt: p.createdAt,
-          likes: 0,
-          retweets: 0,
-          answers: 0,
-        });
-      }
-
-      // 新しい順にソート
-      feedItems.sort((a, b) => b.createdAt - a.createdAt);
-
-      setFeed(feedItems);
-    } catch (e) {
-      console.error("API /quizzes 取得に失敗しました", e);
-    }
-  })();
+  loadQuizzesAndFeed();
 }, []);
+// useEffect(() => {
+//   (async () => {
+//     try {
+//       const rows = await getQuizzes(CURRENT_USER_ID);
+//       const apiPosts: QuizPost[] = rows.map(fromQuizRow);
+
+//       setPosts(apiPosts);
+
+//       // ここから feed を構築
+//       const byBundle = new Map<string, QuizPost[]>();
+//       const singles: QuizPost[] = [];
+
+//       for (const p of apiPosts) {
+//         if (p.bundleId) {
+//           const key = p.bundleId;
+//           const list = byBundle.get(key) ?? [];
+//           list.push(p);
+//           byBundle.set(key, list);
+//         } else {
+//           singles.push(p);
+//         }
+//       }
+
+//       const feedItems: FeedItem[] = [];
+
+//       // 2問以上ある bundle は quizBundle として扱う
+//       for (const [bundleId, postsInBundle] of byBundle) {
+//         if (postsInBundle.length >= 2) {
+//           postsInBundle.sort((a, b) => a.bundleOrder - b.bundleOrder);
+
+//           const createdAt = postsInBundle[0].createdAt;
+//           feedItems.push({
+//             id: `bundle_${bundleId}`,
+//             kind: "quizBundle",
+//             data: postsInBundle,
+//             createdAt,
+//             likes: 0,
+//             retweets: 0,
+//             answers: 0,
+//           });
+//         } else {
+//           // 1問しかない bundle は単発扱いに回す
+//           singles.push(postsInBundle[0]);
+//         }
+//       }
+
+//       // 単発のクイズ投稿
+//       for (const p of singles) {
+//         feedItems.push({
+//           id: p.id,
+//           kind: "quiz",
+//           data: p,
+//           createdAt: p.createdAt,
+//           likes: 0,
+//           retweets: 0,
+//           answers: 0,
+//         });
+//       }
+
+//       // 新しい順にソート
+//       feedItems.sort((a, b) => b.createdAt - a.createdAt);
+
+//       setFeed(feedItems);
+//     } catch (e) {
+//       console.error("API /quizzes 取得に失敗しました", e);
+//     }
+//   })();
+// }, []);
 
   useEffect(() => {
     (async () => {
@@ -1322,6 +1398,52 @@ const handleUserSearch = async () => {
 };
 
 
+// const toggleFollow = async (targetId: number) => {
+//   if (!CURRENT_USER_ID || !targetId) return;
+
+//   try {
+//     const res = await fetch(`${API_BASE}/follows/toggle`, {
+//       method: "POST",
+//       headers: {
+//         "Content-Type": "application/json",
+//         "X-Requested-With": "XMLHttpRequest",
+//       },
+//       credentials: "include",
+//       body: JSON.stringify({
+//         user_id: CURRENT_USER_ID,
+//         target_user_id: targetId,
+//       }),
+//     });
+
+//     if (!res.ok) {
+//       console.error("toggleFollow failed status =", res.status);
+//       return;
+//     }
+
+//     const json = await res.json();
+//     const following: boolean = !!json.following;
+
+//     // フィード絞り込み用 followIds を更新
+//     setFollowIds((prev) => {
+//       if (following) {
+//         if (prev.includes(targetId)) return prev;
+//         return [...prev, targetId];
+//       } else {
+//         return prev.filter((id) => id !== targetId);
+//       }
+//     });
+
+//     // ★ 今見ているプロフィールがこの targetId なら、プロフィール側の表示も更新
+//     if (profileUserId === targetId) {
+//       setProfileIsFollowing(following);
+//       setProfileFollowerCount((prev) =>
+//         following ? prev + 1 : Math.max(0, prev - 1)
+//       );
+//     }
+//   } catch (e) {
+//     console.error("toggleFollow failed", e);
+//   }
+// };
 const toggleFollow = async (targetId: number) => {
   if (!CURRENT_USER_ID || !targetId) return;
 
@@ -1347,7 +1469,6 @@ const toggleFollow = async (targetId: number) => {
     const json = await res.json();
     const following: boolean = !!json.following;
 
-    // フィード絞り込み用 followIds を更新
     setFollowIds((prev) => {
       if (following) {
         if (prev.includes(targetId)) return prev;
@@ -1357,17 +1478,21 @@ const toggleFollow = async (targetId: number) => {
       }
     });
 
-    // ★ 今見ているプロフィールがこの targetId なら、プロフィール側の表示も更新
     if (profileUserId === targetId) {
       setProfileIsFollowing(following);
       setProfileFollowerCount((prev) =>
         following ? prev + 1 : Math.max(0, prev - 1)
       );
     }
+
+    // ★ フォロー状態が変わったので、ホーム用のクイズ/フィードを再取得
+    await loadQuizzesAndFeed();
+
   } catch (e) {
     console.error("toggleFollow failed", e);
   }
 };
+
 
 
 
@@ -1395,29 +1520,35 @@ const toggleFollow = async (targetId: number) => {
     postFeed(toFeedRow(item as any)).catch(() => {});
   };
 
-   const visibleFeed = useMemo(() => {
-  // 自分のID + フォロー中ユーザーID
-  const allowed = new Set<number>([CURRENT_USER_ID, ...followIds]);
+//    const visibleFeed = useMemo(() => {
+//   // 自分のID + フォロー中ユーザーID
+//   const allowed = new Set<number>([CURRENT_USER_ID, ...followIds]);
 
-  return feed.filter((item) => {
-    // 共有投稿は常に表示
-    if (item.kind === "share") return true;
+//   return feed.filter((item) => {
+//     // 共有投稿は常に表示
+//     if (item.kind === "share") return true;
 
-    let authorId: number | null | undefined;
+//     let authorId: number | null | undefined;
 
-    if (item.kind === "quiz") {
-      authorId = item.data.author_id;
-    } else if (item.kind === "quizBundle") {
-      authorId = item.data[0]?.author_id;
-    }
+//     if (item.kind === "quiz") {
+//       authorId = item.data.author_id;
+//     } else if (item.kind === "quizBundle") {
+//       authorId = item.data[0]?.author_id;
+//     }
 
-    // ★ author_id が入っていない古い投稿は「自分の投稿扱い」で表示
-    if (authorId == null) return true;
+//     // ★ author_id が入っていない古い投稿は「自分の投稿扱い」で表示
+//     if (authorId == null) return true;
 
-    // ★ allowed（自分＋フォロー中）に含まれる投稿だけ表示
-    return allowed.has(authorId);
-  });
-}, [feed, followIds]);
+//     // ★ allowed（自分＋フォロー中）に含まれる投稿だけ表示
+//     return allowed.has(authorId);
+//   });
+// }, [feed, followIds]);
+const visibleFeed = useMemo(() => {
+  // /api/quizzes が viewer_id に応じて
+  // 「自分の全投稿＋フォロー中ユーザーの visibility != 1 の投稿」
+  // だけを返しているので、ここでは追加の絞り込みを行わない
+  return feed;
+}, [feed]);
 
 
   // 共有フロー
@@ -1485,12 +1616,12 @@ const toggleFollow = async (targetId: number) => {
             {/* ホーム */}
             <SectionTitle title="" />
             <div className="px-4 pb-4">
-              {feed.length === 0 && (
+              {visibleFeed.length === 0 && (
                 <div className="text-gray-500 text-sm">
                   まだ投稿がありません。「投稿」から作成してみましょう。
                 </div>
               )}
-              {feed.map((item) => (
+              {visibleFeed.map((item) => (
                 <div key={item.id} className="py-3 border-b last:border-b-0">
                   {item.kind === "quiz" ? (
   (() => {
