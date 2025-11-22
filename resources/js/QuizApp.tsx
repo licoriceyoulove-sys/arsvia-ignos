@@ -215,15 +215,33 @@ const [visibility, setVisibility] = useState<Visibility>(1);
   }, [drafts, sharedTags, visibility]);
 
   // submitMulti も置き換え
-  const submitMulti = () => {
-    if (!onPostBundle) return;
-    const posts = drafts
-      .map((d) => toQuizPostWithSharedTags(d, sharedTags, visibility))
-      .filter(Boolean) as QuizPost[];
-    if (posts.length === 0 || posts.length > 10) return;
-    onPostBundle(posts);
-    onCancel();
-  };
+const submitMulti = () => {
+  if (!onPostBundle) return;
+
+  // ★ まとめ投稿用の共通 ID を 1つ発行
+  const bundleId = uid();
+  const baseTime = Date.now();
+
+  const posts = drafts
+    .map((d, idx) => {
+      const p = toQuizPostWithSharedTags(d, sharedTags, visibility);
+      if (!p) return null;
+
+      return {
+        ...p,
+        bundleId,         // ★ ここで共通 bundleId を付与
+        bundleOrder: idx, // ★ 0,1,2,... の順番を保存
+        createdAt: baseTime + idx, // 一応ズラしておく（なくてもいいが安定）
+      } as QuizPost;
+    })
+    .filter(Boolean) as QuizPost[];
+
+  if (posts.length === 0 || posts.length > 10) return;
+
+  onPostBundle(posts);
+  onCancel();
+};
+
 
   // UI
     // UI
@@ -1136,16 +1154,55 @@ useEffect(() => {
   })();
 }, []);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const rows = await getQuizzes(CURRENT_USER_ID);
-        const apiPosts: QuizPost[] = rows.map(fromQuizRow);
+useEffect(() => {
+  (async () => {
+    try {
+      const rows = await getQuizzes(CURRENT_USER_ID);
+      const apiPosts: QuizPost[] = rows.map(fromQuizRow);
 
-        // posts / feed を API の結果だけで構成
-        setPosts(apiPosts);
+      setPosts(apiPosts);
 
-        const apiFeed: FeedItem[] = apiPosts.map((p) => ({
+      // ここから feed を構築
+      const byBundle = new Map<string, QuizPost[]>();
+      const singles: QuizPost[] = [];
+
+      for (const p of apiPosts) {
+        if (p.bundleId) {
+          const key = p.bundleId;
+          const list = byBundle.get(key) ?? [];
+          list.push(p);
+          byBundle.set(key, list);
+        } else {
+          singles.push(p);
+        }
+      }
+
+      const feedItems: FeedItem[] = [];
+
+      // 2問以上ある bundle は quizBundle として扱う
+      for (const [bundleId, postsInBundle] of byBundle) {
+        if (postsInBundle.length >= 2) {
+          postsInBundle.sort((a, b) => a.bundleOrder - b.bundleOrder);
+
+          const createdAt = postsInBundle[0].createdAt;
+          feedItems.push({
+            id: `bundle_${bundleId}`,
+            kind: "quizBundle",
+            data: postsInBundle,
+            createdAt,
+            likes: 0,
+            retweets: 0,
+            answers: 0,
+          });
+        } else {
+          // 1問しかない bundle は単発扱いに回す
+          singles.push(postsInBundle[0]);
+        }
+      }
+
+      // 単発のクイズ投稿
+      for (const p of singles) {
+        feedItems.push({
           id: p.id,
           kind: "quiz",
           data: p,
@@ -1153,53 +1210,58 @@ useEffect(() => {
           likes: 0,
           retweets: 0,
           answers: 0,
-        }));
-        setFeed(apiFeed);
-      } catch (e) {
-        console.error("API /quizzes 取得に失敗しました", e);
-        // ここではフォールバックも何もせず「失敗ログだけ」にしておく
-      }
-    })();
-  }, []);
-
-  useEffect(() => {
-    const ac = new AbortController();
-    (async () => {
-      try {
-        const rows = await getQuizzes(CURRENT_USER_ID);
-        const apiPosts: QuizPost[] = rows.map(fromQuizRow);
-
-        // ★ APIにデータがあればフラグON
-        if (apiPosts.length > 0) setHasApiData(true);
-
-        setPosts((prev) => {
-          const seen = new Set(prev.map((p) => p.id));
-          const merged = [...prev];
-          for (const p of apiPosts) if (!seen.has(p.id)) merged.push(p);
-          return merged;
         });
-
-        setFeed((prev) => {
-          const have = new Set(prev.map((f) => f.id));
-          const add = apiPosts
-            .filter((p) => !have.has(p.id))
-            .map((p) => ({
-              id: p.id,
-              kind: "quiz" as const,
-              data: p,
-              createdAt: p.createdAt,
-              likes: 0,
-              retweets: 0,
-              answers: 0,
-            }));
-          return add.length ? [...add, ...prev] : prev;
-        });
-      } catch (e) {
-        console.error("API init failed", e);
       }
-    })();
-    return () => ac.abort();
-  }, []);
+
+      // 新しい順にソート
+      feedItems.sort((a, b) => b.createdAt - a.createdAt);
+
+      setFeed(feedItems);
+    } catch (e) {
+      console.error("API /quizzes 取得に失敗しました", e);
+    }
+  })();
+}, []);
+
+
+  // useEffect(() => {
+  //   const ac = new AbortController();
+  //   (async () => {
+  //     try {
+  //       const rows = await getQuizzes(CURRENT_USER_ID);
+  //       const apiPosts: QuizPost[] = rows.map(fromQuizRow);
+
+  //       // ★ APIにデータがあればフラグON
+  //       if (apiPosts.length > 0) setHasApiData(true);
+
+  //       setPosts((prev) => {
+  //         const seen = new Set(prev.map((p) => p.id));
+  //         const merged = [...prev];
+  //         for (const p of apiPosts) if (!seen.has(p.id)) merged.push(p);
+  //         return merged;
+  //       });
+
+  //       setFeed((prev) => {
+  //         const have = new Set(prev.map((f) => f.id));
+  //         const add = apiPosts
+  //           .filter((p) => !have.has(p.id))
+  //           .map((p) => ({
+  //             id: p.id,
+  //             kind: "quiz" as const,
+  //             data: p,
+  //             createdAt: p.createdAt,
+  //             likes: 0,
+  //             retweets: 0,
+  //             answers: 0,
+  //           }));
+  //         return add.length ? [...add, ...prev] : prev;
+  //       });
+  //     } catch (e) {
+  //       console.error("API init failed", e);
+  //     }
+  //   })();
+  //   return () => ac.abort();
+  // }, []);
 
   useEffect(() => {
     (async () => {
@@ -1213,43 +1275,43 @@ useEffect(() => {
   }, []);
 
   // ② APIから取得して重複なしでマージ
-  useEffect(() => {
-    const ac = new AbortController();
-    (async () => {
-      try {
+  // useEffect(() => {
+  //   const ac = new AbortController();
+  //   (async () => {
+  //     try {
 
-        // const apiPosts = rows.map(fromQuizRow);
-        const rows = await getQuizzes(CURRENT_USER_ID);
-        // ここを明示的に型付け
-        const apiPosts: QuizPost[] = rows.map(fromQuizRow);
-        setPosts((prev) => {
-          const seen = new Set(prev.map((p) => p.id));
-          const merged = [...prev];
-          for (const p of apiPosts) if (!seen.has(p.id)) merged.push(p);
-          return merged;
-        });
+  //       // const apiPosts = rows.map(fromQuizRow);
+  //       const rows = await getQuizzes(CURRENT_USER_ID);
+  //       // ここを明示的に型付け
+  //       const apiPosts: QuizPost[] = rows.map(fromQuizRow);
+  //       setPosts((prev) => {
+  //         const seen = new Set(prev.map((p) => p.id));
+  //         const merged = [...prev];
+  //         for (const p of apiPosts) if (!seen.has(p.id)) merged.push(p);
+  //         return merged;
+  //       });
 
-        setFeed((prev) => {
-          const have = new Set(prev.map((f) => f.id));
-          const add = apiPosts
-            .filter((p) => !have.has(p.id))
-            .map((p) => ({
-              id: p.id,
-              kind: "quiz" as const,
-              data: p,
-              createdAt: p.createdAt,
-              likes: 0,
-              retweets: 0,
-              answers: 0,
-            }));
-          return add.length ? [...add, ...prev] : prev;
-        });
-      } catch (e) {
-        console.error("API init failed", e);
-      }
-    })();
-    return () => ac.abort();
-  }, []);
+  //       setFeed((prev) => {
+  //         const have = new Set(prev.map((f) => f.id));
+  //         const add = apiPosts
+  //           .filter((p) => !have.has(p.id))
+  //           .map((p) => ({
+  //             id: p.id,
+  //             kind: "quiz" as const,
+  //             data: p,
+  //             createdAt: p.createdAt,
+  //             likes: 0,
+  //             retweets: 0,
+  //             answers: 0,
+  //           }));
+  //         return add.length ? [...add, ...prev] : prev;
+  //       });
+  //     } catch (e) {
+  //       console.error("API init failed", e);
+  //     }
+  //   })();
+  //   return () => ac.abort();
+  // }, []);
 
   // ③ 変更があったらローカルへ保存（この2本だけでOK）
   // useEffect(() => savePosts(posts), [posts]);
@@ -1451,6 +1513,20 @@ const toggleFollow = (targetId: number) => {
       (item.data.author_id === CURRENT_USER_ID && getCurrentUserIgnosId()) ??
       (item.data.author_id ? String(item.data.author_id) : "guest");
 
+    // ★ 先頭タグからタイトルを作る（なければ問題文）
+    const mainTag = item.data.hashtags?.[0];
+    const title =
+      mainTag != null && mainTag !== ""
+        ? `${mainTag}に関する問題` // mainTag は "#英語" 形式なのでそのまま使う
+        : item.data.question;
+
+    // ★ 回答開始ハンドラ（本文タップ & ボタンで共通）
+    const handleAnswer = () => {
+      incAnswer(item.id);
+      setAnswerPool([item.data]);
+      setMode("answer");
+    };
+
     return (
       <>
         {/* ▼ ここ全体がタップできる「ユーザー行」 */}
@@ -1468,12 +1544,16 @@ const toggleFollow = (targetId: number) => {
             <span className="text-xs text-gray-500">@{ignosId}</span>
           </div>
         </button>
-        {/* ▲ アイコン or @ignosId をタップ = プロフィールへ */}
+        {/* ▲ プロフィールへ */}
 
-        {/* ここから下は今まで通りの投稿内容 */}
-        <div className="text-[15px] whitespace-pre-wrap mb-2">
-          {item.data.question}
+        {/* ▼ 投稿内容：タップで回答開始 */}
+        <div
+          className="text-[15px] whitespace-pre-wrap mb-2 cursor-pointer"
+          onClick={handleAnswer}
+        >
+          {title}
         </div>
+
         <div className="flex flex-wrap mb-2">
           {item.data.hashtags.map((t) => (
             <TagChip
@@ -1493,11 +1573,7 @@ const toggleFollow = (targetId: number) => {
           answers={item.answers}
           onLike={() => incLike(item.id)}
           onRT={() => incRT(item.id)}
-          onAnswer={() => {
-            incAnswer(item.id);
-            setAnswerPool([item.data]);
-            setMode("answer");
-          }}
+          onAnswer={handleAnswer} // ★ 同じハンドラを使う
         />
       </>
     );
@@ -1516,6 +1592,20 @@ const toggleFollow = (targetId: number) => {
       (first?.author_id === CURRENT_USER_ID && getCurrentUserIgnosId()) ??
       (first?.author_id ? String(first.author_id) : "guest");
 
+    // ★ 先頭タグからまとめタイトルを作る（なければ1問目の問題文）
+    const mainTag = first?.hashtags?.[0];
+    const bundleTitle =
+      mainTag != null && mainTag !== ""
+        ? `${mainTag}に関する問題`
+        : first?.question ?? "クイズ（複数）";
+
+    // ★ 回答開始ハンドラ（タイトル/全◯問/ボタン共通）
+    const handleAnswer = () => {
+      incAnswer(item.id);
+      setAnswerPool(item.data);
+      setMode("answer");
+    };
+
     return (
       <>
         {/* ▼ 先頭問題のユーザー行：タップでそのユーザーのプロフィール */}
@@ -1531,28 +1621,33 @@ const toggleFollow = (targetId: number) => {
           </div>
         </button>
 
-        <div className="text-[15px] whitespace-pre-wrap mb-2">
-          {first?.question ?? "クイズ（複数）"}
+        {/* ▼ タイトル部分：タップで回答開始 */}
+        <div
+          className="text-[15px] whitespace-pre-wrap mb-2 cursor-pointer"
+          onClick={handleAnswer}
+        >
+          {bundleTitle}
         </div>
-        <div className="text-xs text-gray-500 mb-2">
+        <div
+          className="text-xs text-gray-500 mb-2 cursor-pointer"
+          onClick={handleAnswer}
+        >
           全{item.data.length}問
         </div>
+
         <ActionBar
           likes={item.likes}
           retweets={item.retweets}
           answers={item.answers}
           onLike={() => incLike(item.id)}
           onRT={() => incRT(item.id)}
-          onAnswer={() => {
-            incAnswer(item.id);
-            setAnswerPool(item.data);
-            setMode("answer");
-          }}
+          onAnswer={handleAnswer}
         />
       </>
     );
   })()
 ) : (
+
   /* share の描画はそのままでOK */
 
                     <>

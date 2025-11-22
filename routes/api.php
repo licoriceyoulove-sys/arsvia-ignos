@@ -111,34 +111,43 @@ Route::post('/quizzes/bulk', function (Request $request) {
 
     DB::transaction(function () use ($rows) {
         foreach ($rows as $row) {
-            $id = $row['id'] ?? (string) Str::uuid();
-            $question = $row['question'] ?? '';
-            $type = $row['type'] ?? 'choice';
-            $choices = $row['choices'] ?? null;
+            $id           = $row['id'] ?? (string) Str::uuid();
+            $question     = $row['question'] ?? '';
+            $type         = $row['type'] ?? 'choice';
+            $choices      = $row['choices'] ?? null;
             $correctIndex = $row['correct_index'] ?? null;
-            $modelAnswer = $row['model_answer'] ?? null;
-            $note = $row['note'] ?? null;
-            $hashtags = $row['hashtags'] ?? [];
-            $visibility = $row['visibility'] ?? 1;
-            $authorId = $row['author_id'] ?? null;
+            $modelAnswer  = $row['model_answer'] ?? null;
+            $note         = $row['note'] ?? null;
+            $hashtags     = $row['hashtags'] ?? [];
+            $visibility   = $row['visibility'] ?? 1;
+            $authorId     = $row['author_id'] ?? null;
+
+            // ★ ここを追加：フロントから送られてくる bundle_id / bundle_order を拾う
+            $bundleId     = $row['bundle_id'] ?? null;
+            $bundleOrder  = $row['bundle_order'] ?? 0;
+
             // created_at はフロントの値は使わず、サーバー時間に固定
             $createdAt = now();
 
             DB::table('quizzes')->updateOrInsert(
                 ['id' => $id],
                 [
-                    'author_id' => $authorId,
-                    'question' => $question,
-                    'type' => $type,
-                    'choices' => $choices !== null
+                    'author_id'     => $authorId,
+                    'question'      => $question,
+                    'type'          => $type,
+                    'choices'       => $choices !== null
                         ? json_encode($choices, JSON_UNESCAPED_UNICODE)
                         : null,
                     'correct_index' => $correctIndex,
-                    'model_answer' => $modelAnswer,
-                    'note' => $note,
-                    'hashtags' => json_encode($hashtags, JSON_UNESCAPED_UNICODE),
-                    'visibility' => $visibility,
-                    'created_at' => $createdAt,
+                    'model_answer'  => $modelAnswer,
+                    'note'          => $note,
+                    'hashtags'      => json_encode($hashtags, JSON_UNESCAPED_UNICODE),
+                    'visibility'    => $visibility,
+                    'created_at'    => $createdAt,
+
+                    // ★ ここも追加：DBのカラムに保存
+                    'bundle_id'     => $bundleId,
+                    'bundle_order'  => $bundleOrder,
                 ]
             );
         }
@@ -146,6 +155,7 @@ Route::post('/quizzes/bulk', function (Request $request) {
 
     return response()->json(['ok' => true]);
 })->withoutMiddleware(\App\Http\Middleware\VerifyCsrfToken::class);
+
 
 // ★ 追加: 指定ユーザーの投稿一覧（プロフィール用）
 Route::get('/users/{id}/quizzes', function (int $id) {

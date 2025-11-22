@@ -17,6 +17,8 @@ export type QuizRowFromApi = {
   visibility?: number | null;
   author_display_name?: string | null;
   author_ignos_id?: string | null;
+  bundle_id?: string | null;
+  bundle_order?: number | null;
 };
 
 // APIの行 → 既存のQuizPostへ
@@ -43,6 +45,8 @@ export const fromQuizRow = (r: QuizRowFromApi): QuizPost => {
     // JOIN で取ってきた display_name / ignos_id
     authorDisplayName: r.author_display_name ?? undefined,
     authorIgnosId: r.author_ignos_id ?? undefined,
+      bundleId: r.bundle_id ?? null,
+  bundleOrder: r.bundle_order ?? 0,
   };
 };
 
@@ -60,6 +64,8 @@ export const toQuizRow = (p: QuizPost) => ({
   author_id: p.author_id ?? null,
   visibility: p.visibility ?? 1,
   // ★ display_name はサーバー側で users から引くので送らない
+    bundle_id: p.bundleId ?? null,
+  bundle_order: p.bundleOrder ?? 0,
 });
 
 // FeedItem → API行（dataはそのままJSONで送る）
