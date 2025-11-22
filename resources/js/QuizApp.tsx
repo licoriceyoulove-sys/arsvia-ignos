@@ -134,14 +134,32 @@ const iconUrl = (name: string) => `./build/icons/${name}.png`;
 
 const Composer: React.FC<{
   onCancel: () => void;
-  onPostBundle?: (posts: QuizPost[]) => void; // 追加：バンドル用
-}> = ({ onCancel, onPostBundle }) => {
+  onPostBundle?: (posts: QuizPost[]) => void;   // 新規（まとめ投稿）用
+  onEditSingle?: (post: QuizPost) => void;      // 単発投稿の編集確定用
+  mode?: "create" | "edit";                     // モード
+  initialPost?: QuizPost | null;                // 編集対象（単発）
+}> = ({
+  onCancel,
+  onPostBundle,
+  onEditSingle,
+  mode = "create",
+  initialPost,
+}) => {
 
-  const [sharedTags, setSharedTags] = useState<string>(""); // 共通タグ（全問題に適用）
+
+  const [sharedTags, setSharedTags] = useState<string>(() => {
+    if (initialPost && initialPost.hashtags) {
+      return initialPost.hashtags.join(" ");
+    }
+    return "";
+  });
   const [activeIdx, setActiveIdx] = useState<number>(0); // 表示中の問題インデックス
-const [visibility, setVisibility] = useState<Visibility>(1);
+  const [visibility, setVisibility] = useState<Visibility>(
+    initialPost?.visibility ?? 1
+  );
   // 複数問題 用 state（最大10）
   type Draft = {
+    id?: string;            // ★ 元投稿の id（編集時のみ）
     type: QuizType;
     question: string;
     note: string;
@@ -151,6 +169,7 @@ const [visibility, setVisibility] = useState<Visibility>(1);
     modelAnswer: string;
   };
   const makeEmptyDraft = (): Draft => ({
+    id: undefined,
     type: "choice",
     question: "",
     note: "",
@@ -159,7 +178,45 @@ const [visibility, setVisibility] = useState<Visibility>(1);
     wrongChoices: ["", ""],
     modelAnswer: "",
   });
-  const [drafts, setDrafts] = useState<Draft[]>([makeEmptyDraft()]);
+const [drafts, setDrafts] = useState<Draft[]>(() => {
+    if (!initialPost) {
+      // 新規投稿モード
+      return [makeEmptyDraft()];
+    }
+
+    // 編集モード：initialPost から 1 件分の Draft を作成
+    if (initialPost.type === "choice") {
+      const choices = initialPost.choices ?? [];
+      const correctIndex = initialPost.correctIndex ?? 0;
+      const correct = choices[correctIndex] ?? "";
+      const wrong = choices.filter((_, i) => i !== correctIndex);
+      return [
+        {
+          id: initialPost.id,
+          type: "choice",
+          question: initialPost.question,
+          note: initialPost.note ?? "",
+          tagsInput: "",
+          correctChoice: correct,
+          wrongChoices: wrong.length ? wrong : ["", ""],
+          modelAnswer: "",
+        },
+      ];
+    } else {
+      return [
+        {
+          id: initialPost.id,
+          type: "text",
+          question: initialPost.question,
+          note: initialPost.note ?? "",
+          tagsInput: "",
+          correctChoice: "",
+          wrongChoices: ["", ""],
+          modelAnswer: initialPost.modelAnswer ?? "",
+        },
+      ];
+    }
+  });
 
   // 複数用の Post 化関数（共通タグを使う）
   const toQuizPostWithSharedTags = (
@@ -215,7 +272,55 @@ const [visibility, setVisibility] = useState<Visibility>(1);
   }, [drafts, sharedTags, visibility]);
 
   // submitMulti も置き換え
-const submitMulti = () => {
+  const submitMulti = () => {
+    // ★ 編集モード：単発投稿 1 件だけ扱う
+    if (mode === "edit" && onEditSingle && drafts.length === 1) {
+      const d = drafts[0];
+      const tags = parseHashtags(sharedTags);
+      if (!d.question.trim() || tags.length === 0) return;
+
+      const baseId = initialPost?.id ?? d.id ?? uid();
+      const baseCreatedAt = initialPost?.createdAt ?? Date.now();
+
+      let post: QuizPost;
+
+      if (d.type === "choice") {
+        const correctOk = d.correctChoice.trim().length > 0;
+        const wrongFilled = d.wrongChoices.map((s) => s.trim()).filter(Boolean);
+        if (!correctOk || wrongFilled.length < 1) return;
+
+        post = {
+          id: baseId,
+          question: d.question.trim(),
+          type: "choice",
+          choices: [d.correctChoice.trim(), ...wrongFilled],
+          correctIndex: 0,
+          note: d.note.trim() || undefined,
+          hashtags: tags,
+          createdAt: baseCreatedAt,     // 元の時間を維持
+          author_id: CURRENT_USER_ID,
+          visibility,
+        };
+      } else {
+        if (!d.modelAnswer.trim()) return;
+
+        post = {
+          id: baseId,
+          question: d.question.trim(),
+          type: "text",
+          modelAnswer: d.modelAnswer.trim(),
+          note: d.note.trim() || undefined,
+          hashtags: tags,
+          createdAt: baseCreatedAt,
+          author_id: CURRENT_USER_ID,
+          visibility,
+        };
+      }
+
+      onEditSingle(post);
+      onCancel();
+      return;
+    }
   if (!onPostBundle) return;
 
   // ★ まとめ投稿用の共通 ID を 1つ発行
@@ -257,17 +362,20 @@ const submitMulti = () => {
           キャンセル
         </button>
 
-        {/* 真ん中はタイトル入れてもOK（今は空） */}
-        <div className="text-sm font-bold" />
+        {/* 真ん中のタイトル：モードで出し分け */}
+        <div className="text-sm font-bold">
+          {mode === "edit" ? "投稿を編集" : ""}
+        </div>
 
         <button
-          disabled={!canPostMulti}
+          disabled={!canPostMulti} // ★ ここはそのまま使ってOK（編集時も1件だけなので true/false 判定に使える）
           onClick={submitMulti}
           className={`px-4 py-1 rounded-full text-sm font-bold ${
             canPostMulti ? "bg-black text-white" : "bg-gray-200 text-gray-400"
           }`}
         >
-          投稿（{drafts.length}問）
+          {/* ★ モードでラベルを出し分け */}
+          {mode === "edit" ? "保存" : `投稿（${drafts.length}問）`}
         </button>
       </div>
 
@@ -324,30 +432,36 @@ const submitMulti = () => {
           </div>
         </div>
 
-        {/* ナビゲーション（＜ 問題 x/y ＞） */}
-        <div className="flex items-center justify-between">
-          <button
-            onClick={() => setActiveIdx((i) => Math.max(0, i - 1))}
-            className="px-3 py-1 rounded-full border"
-            disabled={activeIdx === 0}
-            aria-label="前の問題"
-          >
-            ＜
-          </button>
-          <div className="text-sm">
-            問題 {activeIdx + 1} / {drafts.length}
+        {/* ナビゲーション */}
+        {mode === "create" ? (
+          // 新規モード：＜ 問題 x/y ＞
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => setActiveIdx((i) => Math.max(0, i - 1))}
+              className="px-3 py-1 rounded-full border"
+              disabled={activeIdx === 0}
+              aria-label="前の問題"
+            >
+              ＜
+            </button>
+            <div className="text-sm">
+              問題 {activeIdx + 1} / {drafts.length}
+            </div>
+            <button
+              onClick={() =>
+                setActiveIdx((i) => Math.min(drafts.length - 1, i + 1))
+              }
+              className="px-3 py-1 rounded-full border"
+              disabled={activeIdx === drafts.length - 1}
+              aria-label="次の問題"
+            >
+              ＞
+            </button>
           </div>
-          <button
-            onClick={() =>
-              setActiveIdx((i) => Math.min(drafts.length - 1, i + 1))
-            }
-            className="px-3 py-1 rounded-full border"
-            disabled={activeIdx === drafts.length - 1}
-            aria-label="次の問題"
-          >
-            ＞
-          </button>
-        </div>
+        ) : (
+          // 編集モード：1問固定なのでシンプルなラベルだけ
+          <div className="text-sm font-bold">この投稿を編集</div>
+        )}
 
         {/* 表示中の1問だけ編集 */}
         <MultiEditor
@@ -357,6 +471,9 @@ const submitMulti = () => {
             setDrafts((prev) => prev.map((x, i) => (i === activeIdx ? nd : x)))
           }
           onRemove={() => {
+            // 編集モードでは削除させない
+            if (mode === "edit") return;
+
             setDrafts((prev) => {
               const next = prev.filter((_, i) => i !== activeIdx);
               const nextIdx = Math.max(0, Math.min(activeIdx, next.length - 1));
@@ -364,30 +481,34 @@ const submitMulti = () => {
               return next.length ? next : [makeEmptyDraft()];
             });
           }}
-          removable={drafts.length > 1}
+          // 削除可能なのは新規モードで2問以上あるときだけ
+          removable={mode === "create" && drafts.length > 1}
         />
 
         {/* 追加ボタン（追加後は新規問題がアクティブに） */}
-        <div>
-          {drafts.length < 10 && (
-            <button
-              onClick={() =>
-                setDrafts((prev) => {
-                  const next = [...prev, makeEmptyDraft()];
-                  setActiveIdx(next.length - 1);
-                  return next;
-                })
-              }
-              className="text-blue-600 text-sm"
-            >
-              + 問題を追加
-            </button>
-          )}
-        </div>
+        {mode === "create" && (
+          <div>
+            {drafts.length < 10 && (
+              <button
+                onClick={() =>
+                  setDrafts((prev) => {
+                    const next = [...prev, makeEmptyDraft()];
+                    setActiveIdx(next.length - 1);
+                    return next;
+                  })
+                }
+                className="text-blue-600 text-sm"
+              >
+                + 問題を追加
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
 };
+
 
 
 
@@ -1104,6 +1225,10 @@ export default function QuizApp() {
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [composerOpen, setComposerOpen] = useState(false);
 
+    const [composerMode, setComposerMode] = useState<"create" | "edit">("create");
+  const [editTargetPost, setEditTargetPost] = useState<QuizPost | null>(null);
+  const [editFeedId, setEditFeedId] = useState<string | null>(null);
+
   const [mode, setMode] = useState<
     "home" | "folders" | "quiz" | "search" | "notifications" | "answer"  | "profile"
   >("home");
@@ -1498,6 +1623,29 @@ const toggleFollow = async (targetId: number) => {
 
   const backToFolders = () => setMode("folders");
 
+    // 追加：単発投稿の編集結果を適用
+  const applyEditSingle = (updated: QuizPost) => {
+    const id = updated.id;
+
+    // posts（全問題の一覧）を更新
+    setPosts((prev) => prev.map((p) => (p.id === id ? updated : p)));
+
+    // feed（タイムライン）を更新
+    setFeed((prev) =>
+      prev.map((item) => {
+        if (item.id !== editFeedId) return item;
+        if (item.kind === "quiz") {
+          return { ...item, data: updated };
+        }
+        return item; // quizBundle / share は今は対象外
+      })
+    );
+
+    // バックエンドにも保存（fire-and-forget）
+    bulkUpsertQuizzes([toQuizRow(updated)]).catch(() => {});
+  };
+
+
   // 追加：まとめて投稿
   const addPostBundle = (bundle: QuizPost[]) => {
     // posts には問題を全て展開して格納
@@ -1572,6 +1720,18 @@ const visibleFeed = useMemo(() => {
     setMode("home");
 
     postFeed(toFeedRow(item as any)).catch(() => {});
+  };
+
+  const openEditForFeedItem = (item: FeedItem) => {
+    if (item.kind !== "quiz") {
+      // まとめ投稿（quizBundle）などは今は編集対象外。必要なら後で対応。
+      return;
+    }
+
+    setEditTargetPost(item.data);   // この単発投稿を編集する
+    setEditFeedId(item.id);         // feed 上の id を覚えておく
+    setComposerMode("edit");        // モードを編集に
+    setComposerOpen(true);          // モーダルオープン
   };
 
   const incLike = (id: string) => {
@@ -1696,8 +1856,17 @@ const visibleFeed = useMemo(() => {
           answers={item.answers}
           onLike={() => incLike(item.id)}
           onRT={() => incRT(item.id)}
-          onAnswer={handleAnswer} // ★ 同じハンドラを使う
+          onAnswer={handleAnswer}
+          // ★ 自分の投稿かどうか
+          isMine={item.data.author_id === CURRENT_USER_ID}
+          // ★ 自分の投稿なら編集メニューを有効化
+          onEdit={
+            item.data.author_id === CURRENT_USER_ID
+              ? () => openEditForFeedItem(item)
+              : undefined
+          }
         />
+
       </>
     );
   })()
@@ -1945,14 +2114,18 @@ const visibleFeed = useMemo(() => {
 
       {/* 投稿モーダル */}
       <Modal
-  open={composerOpen}
-  onClose={() => setComposerOpen(false)}
->
-  <Composer
-    onPostBundle={addPostBundle}
-    onCancel={() => setComposerOpen(false)}
-  />
-</Modal>
+        open={composerOpen}
+        onClose={() => setComposerOpen(false)}
+      >
+        <Composer
+          mode={composerMode}                         // ★ 追加
+          initialPost={composerMode === "edit" ? editTargetPost : null} // ★ 追加
+          onPostBundle={addPostBundle}                // 新規時
+          onEditSingle={applyEditSingle}              // 編集確定時
+          onCancel={() => setComposerOpen(false)}
+        />
+      </Modal>
+
 
       {/* 共有メッセージ編集モーダル */}
       <Modal open={shareOpen} onClose={() => setShareOpen(false)}>
@@ -1985,7 +2158,13 @@ const visibleFeed = useMemo(() => {
       {/* ▶ ホーム画面用フローティング投稿ボタン（ブルースカイ風） ◀ */}
       {mode === "home" && (
         <button
-          onClick={() => setComposerOpen(true)}
+onClick={() => {
+            // ★ 新規投稿モードにリセットしてから開く
+            setComposerMode("create");
+            setEditTargetPost(null);
+            setEditFeedId(null);
+            setComposerOpen(true);
+          }}
           className="
             fixed
             bottom-20 right-4
