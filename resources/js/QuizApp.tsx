@@ -134,89 +134,93 @@ const iconUrl = (name: string) => `./build/icons/${name}.png`;
 
 const Composer: React.FC<{
   onCancel: () => void;
-  onPostBundle?: (posts: QuizPost[]) => void;   // 新規（まとめ投稿）用
-  onEditSingle?: (post: QuizPost) => void;      // 単発投稿の編集確定用
-  mode?: "create" | "edit";                     // モード
-  initialPost?: QuizPost | null;                // 編集対象（単発）
+  onPostBundle?: (posts: QuizPost[]) => void;   // 新規まとめ投稿
+  onEditBundle?: (posts: QuizPost[]) => void;   // 編集（単発/まとめ）
+  mode?: "create" | "edit";
+  initialPosts?: QuizPost[] | null;             // 編集対象（0 or 複数）
 }> = ({
   onCancel,
   onPostBundle,
-  onEditSingle,
+  onEditBundle,
   mode = "create",
-  initialPost,
+  initialPosts,
 }) => {
 
 
-  const [sharedTags, setSharedTags] = useState<string>(() => {
-    if (initialPost && initialPost.hashtags) {
-      return initialPost.hashtags.join(" ");
-    }
-    return "";
-  });
-  const [activeIdx, setActiveIdx] = useState<number>(0); // 表示中の問題インデックス
-  const [visibility, setVisibility] = useState<Visibility>(
-    initialPost?.visibility ?? 1
-  );
-  // 複数問題 用 state（最大10）
-  type Draft = {
-    id?: string;            // ★ 元投稿の id（編集時のみ）
-    type: QuizType;
-    question: string;
-    note: string;
-    tagsInput: string;
-    correctChoice: string;
-    wrongChoices: string[];
-    modelAnswer: string;
-  };
-  const makeEmptyDraft = (): Draft => ({
-    id: undefined,
-    type: "choice",
-    question: "",
-    note: "",
-    tagsInput: "",
-    correctChoice: "",
-    wrongChoices: ["", ""],
-    modelAnswer: "",
-  });
-const [drafts, setDrafts] = useState<Draft[]>(() => {
-    if (!initialPost) {
-      // 新規投稿モード
-      return [makeEmptyDraft()];
-    }
 
-    // 編集モード：initialPost から 1 件分の Draft を作成
-    if (initialPost.type === "choice") {
-      const choices = initialPost.choices ?? [];
-      const correctIndex = initialPost.correctIndex ?? 0;
+// 共通タグ
+const [sharedTags, setSharedTags] = useState<string>(() => {
+  if (initialPosts && initialPosts.length > 0) {
+    return (initialPosts[0].hashtags ?? []).join(" ");
+  }
+  return "";
+});
+  const [activeIdx, setActiveIdx] = useState<number>(0); // 表示中の問題インデックス
+// 公開範囲
+const [visibility, setVisibility] = useState<Visibility>(
+  initialPosts?.[0]?.visibility ?? 1
+);
+  // 複数問題 用 state（最大10）
+  
+// ドラフト型（id を持つようにしておくと楽）
+type Draft = {
+  id?: string;
+  type: QuizType;
+  question: string;
+  note: string;
+  tagsInput: string;
+  correctChoice: string;
+  wrongChoices: string[];
+  modelAnswer: string;
+};
+const makeEmptyDraft = (): Draft => ({
+  id: undefined,
+  type: "choice",
+  question: "",
+  note: "",
+  tagsInput: "",
+  correctChoice: "",
+  wrongChoices: ["", ""],
+  modelAnswer: "",
+});
+const [drafts, setDrafts] = useState<Draft[]>(() => {
+  if (!initialPosts || initialPosts.length === 0) {
+    // 新規投稿モード
+    return [makeEmptyDraft()];
+  }
+
+  // 編集モード：initialPosts の1件1件を Draft に変換
+  return initialPosts.map((p) => {
+    if (p.type === "choice") {
+      const choices = p.choices ?? [];
+      const correctIndex = p.correctIndex ?? 0;
       const correct = choices[correctIndex] ?? "";
       const wrong = choices.filter((_, i) => i !== correctIndex);
-      return [
-        {
-          id: initialPost.id,
-          type: "choice",
-          question: initialPost.question,
-          note: initialPost.note ?? "",
-          tagsInput: "",
-          correctChoice: correct,
-          wrongChoices: wrong.length ? wrong : ["", ""],
-          modelAnswer: "",
-        },
-      ];
+
+      return {
+        id: p.id,
+        type: "choice",
+        question: p.question,
+        note: p.note ?? "",
+        tagsInput: "",
+        correctChoice: correct,
+        wrongChoices: wrong.length ? wrong : ["", ""],
+        modelAnswer: "",
+      };
     } else {
-      return [
-        {
-          id: initialPost.id,
-          type: "text",
-          question: initialPost.question,
-          note: initialPost.note ?? "",
-          tagsInput: "",
-          correctChoice: "",
-          wrongChoices: ["", ""],
-          modelAnswer: initialPost.modelAnswer ?? "",
-        },
-      ];
+      return {
+        id: p.id,
+        type: "text",
+        question: p.question,
+        note: p.note ?? "",
+        tagsInput: "",
+        correctChoice: "",
+        wrongChoices: ["", ""],
+        modelAnswer: p.modelAnswer ?? "",
+      };
     }
   });
+});
 
   // 複数用の Post 化関数（共通タグを使う）
   const toQuizPostWithSharedTags = (
@@ -273,79 +277,45 @@ const [drafts, setDrafts] = useState<Draft[]>(() => {
 
   // submitMulti も置き換え
   const submitMulti = () => {
-    // ★ 編集モード：単発投稿 1 件だけ扱う
-    if (mode === "edit" && onEditSingle && drafts.length === 1) {
-      const d = drafts[0];
-      const tags = parseHashtags(sharedTags);
-      if (!d.question.trim() || tags.length === 0) return;
+  const baseTime = initialPosts?.[0]?.createdAt ?? Date.now();
+  const originalBundleId = initialPosts?.[0]?.bundleId;
 
-      const baseId = initialPost?.id ?? d.id ?? uid();
-      const baseCreatedAt = initialPost?.createdAt ?? Date.now();
-
-      let post: QuizPost;
-
-      if (d.type === "choice") {
-        const correctOk = d.correctChoice.trim().length > 0;
-        const wrongFilled = d.wrongChoices.map((s) => s.trim()).filter(Boolean);
-        if (!correctOk || wrongFilled.length < 1) return;
-
-        post = {
-          id: baseId,
-          question: d.question.trim(),
-          type: "choice",
-          choices: [d.correctChoice.trim(), ...wrongFilled],
-          correctIndex: 0,
-          note: d.note.trim() || undefined,
-          hashtags: tags,
-          createdAt: baseCreatedAt,     // 元の時間を維持
-          author_id: CURRENT_USER_ID,
-          visibility,
-        };
-      } else {
-        if (!d.modelAnswer.trim()) return;
-
-        post = {
-          id: baseId,
-          question: d.question.trim(),
-          type: "text",
-          modelAnswer: d.modelAnswer.trim(),
-          note: d.note.trim() || undefined,
-          hashtags: tags,
-          createdAt: baseCreatedAt,
-          author_id: CURRENT_USER_ID,
-          visibility,
-        };
-      }
-
-      onEditSingle(post);
-      onCancel();
-      return;
-    }
-  if (!onPostBundle) return;
-
-  // ★ まとめ投稿用の共通 ID を 1つ発行
-  const bundleId = uid();
-  const baseTime = Date.now();
-
+   const bundleIdBase =
+    originalBundleId ?? (mode === "create" ? uid() : undefined);
+    
+  // Draft → QuizPost 変換（id は元のものを優先）
   const posts = drafts
     .map((d, idx) => {
       const p = toQuizPostWithSharedTags(d, sharedTags, visibility);
       if (!p) return null;
 
+      const id = d.id ?? initialPosts?.[idx]?.id ?? uid();
+      // const bundleId = originalBundleId ?? p.bundleId;
+
       return {
         ...p,
-        bundleId,         // ★ ここで共通 bundleId を付与
-        bundleOrder: idx, // ★ 0,1,2,... の順番を保存
-        createdAt: baseTime + idx, // 一応ズラしておく（なくてもいいが安定）
+        id,
+bundleId: bundleIdBase,
+        bundleOrder: idx,
+        createdAt: initialPosts?.[idx]?.createdAt ?? baseTime + idx,
       } as QuizPost;
     })
     .filter(Boolean) as QuizPost[];
 
-  if (posts.length === 0 || posts.length > 10) return;
+  if (!posts.length || posts.length > 10) return;
 
-  onPostBundle(posts);
-  onCancel();
+  if (mode === "edit" && onEditBundle) {
+    onEditBundle(posts); // ★ 単発/まとめ共通
+    onCancel();
+    return;
+  }
+
+  if (onPostBundle) {
+    onPostBundle(posts);
+    onCancel();
+  }
 };
+
 
 
   // UI
@@ -432,36 +402,37 @@ const [drafts, setDrafts] = useState<Draft[]>(() => {
           </div>
         </div>
 
-        {/* ナビゲーション */}
-        {mode === "create" ? (
-          // 新規モード：＜ 問題 x/y ＞
-          <div className="flex items-center justify-between">
-            <button
-              onClick={() => setActiveIdx((i) => Math.max(0, i - 1))}
-              className="px-3 py-1 rounded-full border"
-              disabled={activeIdx === 0}
-              aria-label="前の問題"
-            >
-              ＜
-            </button>
-            <div className="text-sm">
-              問題 {activeIdx + 1} / {drafts.length}
-            </div>
-            <button
-              onClick={() =>
-                setActiveIdx((i) => Math.min(drafts.length - 1, i + 1))
-              }
-              className="px-3 py-1 rounded-full border"
-              disabled={activeIdx === drafts.length - 1}
-              aria-label="次の問題"
-            >
-              ＞
-            </button>
-          </div>
-        ) : (
-          // 編集モード：1問固定なのでシンプルなラベルだけ
-          <div className="text-sm font-bold">この投稿を編集</div>
-        )}
+{/* ナビゲーション */}
+{drafts.length > 1 ? (
+  <div className="flex items-center justify-between">
+    <button
+      onClick={() => setActiveIdx((i) => Math.max(0, i - 1))}
+      className="px-3 py-1 rounded-full border"
+      disabled={activeIdx === 0}
+      aria-label="前の問題"
+    >
+      ＜
+    </button>
+    <div className="text-sm">
+      問題 {activeIdx + 1} / {drafts.length}
+    </div>
+    <button
+      onClick={() =>
+        setActiveIdx((i) => Math.min(drafts.length - 1, i + 1))
+      }
+      className="px-3 py-1 rounded-full border"
+      disabled={activeIdx === drafts.length - 1}
+      aria-label="次の問題"
+    >
+      ＞
+    </button>
+  </div>
+) : (
+  <div className="text-sm font-bold">
+    {mode === "edit" ? "この投稿を編集" : ""}
+  </div>
+)}
+
 
         {/* 表示中の1問だけ編集 */}
         <MultiEditor
@@ -470,38 +441,38 @@ const [drafts, setDrafts] = useState<Draft[]>(() => {
           onChange={(nd) =>
             setDrafts((prev) => prev.map((x, i) => (i === activeIdx ? nd : x)))
           }
-          onRemove={() => {
-            // 編集モードでは削除させない
-            if (mode === "edit") return;
+onRemove={() => {
+  setDrafts((prev) => {
+    const next = prev.filter((_, i) => i !== activeIdx);
+    const nextIdx = Math.max(0, Math.min(activeIdx, next.length - 1));
+    setActiveIdx(nextIdx);
+    return next.length ? next : [makeEmptyDraft()];
+  });
+}}
+removable={drafts.length > 1}
 
-            setDrafts((prev) => {
-              const next = prev.filter((_, i) => i !== activeIdx);
-              const nextIdx = Math.max(0, Math.min(activeIdx, next.length - 1));
-              setActiveIdx(nextIdx);
-              return next.length ? next : [makeEmptyDraft()];
-            });
-          }}
-          // 削除可能なのは新規モードで2問以上あるときだけ
-          removable={mode === "create" && drafts.length > 1}
         />
 
         {/* 追加ボタン（追加後は新規問題がアクティブに） */}
         {mode === "create" && (
           <div>
             {drafts.length < 10 && (
-              <button
-                onClick={() =>
-                  setDrafts((prev) => {
-                    const next = [...prev, makeEmptyDraft()];
-                    setActiveIdx(next.length - 1);
-                    return next;
-                  })
-                }
-                className="text-blue-600 text-sm"
-              >
-                + 問題を追加
-              </button>
-            )}
+  <div>
+    <button
+      onClick={() =>
+        setDrafts((prev) => {
+          const next = [...prev, makeEmptyDraft()];
+          setActiveIdx(next.length - 1);
+          return next;
+        })
+      }
+      className="text-blue-600 text-sm"
+    >
+      + 問題を追加
+    </button>
+  </div>
+)}
+
           </div>
         )}
       </div>
@@ -1226,7 +1197,7 @@ export default function QuizApp() {
   const [composerOpen, setComposerOpen] = useState(false);
 
     const [composerMode, setComposerMode] = useState<"create" | "edit">("create");
-  const [editTargetPost, setEditTargetPost] = useState<QuizPost | null>(null);
+  const [editTargetPosts, setEditTargetPosts] = useState<QuizPost[] | null>(null);
   const [editFeedId, setEditFeedId] = useState<string | null>(null);
 
   const [mode, setMode] = useState<
@@ -1357,74 +1328,6 @@ useEffect(() => {
 useEffect(() => {
   loadQuizzesAndFeed();
 }, []);
-// useEffect(() => {
-//   (async () => {
-//     try {
-//       const rows = await getQuizzes(CURRENT_USER_ID);
-//       const apiPosts: QuizPost[] = rows.map(fromQuizRow);
-
-//       setPosts(apiPosts);
-
-//       // ここから feed を構築
-//       const byBundle = new Map<string, QuizPost[]>();
-//       const singles: QuizPost[] = [];
-
-//       for (const p of apiPosts) {
-//         if (p.bundleId) {
-//           const key = p.bundleId;
-//           const list = byBundle.get(key) ?? [];
-//           list.push(p);
-//           byBundle.set(key, list);
-//         } else {
-//           singles.push(p);
-//         }
-//       }
-
-//       const feedItems: FeedItem[] = [];
-
-//       // 2問以上ある bundle は quizBundle として扱う
-//       for (const [bundleId, postsInBundle] of byBundle) {
-//         if (postsInBundle.length >= 2) {
-//           postsInBundle.sort((a, b) => a.bundleOrder - b.bundleOrder);
-
-//           const createdAt = postsInBundle[0].createdAt;
-//           feedItems.push({
-//             id: `bundle_${bundleId}`,
-//             kind: "quizBundle",
-//             data: postsInBundle,
-//             createdAt,
-//             likes: 0,
-//             retweets: 0,
-//             answers: 0,
-//           });
-//         } else {
-//           // 1問しかない bundle は単発扱いに回す
-//           singles.push(postsInBundle[0]);
-//         }
-//       }
-
-//       // 単発のクイズ投稿
-//       for (const p of singles) {
-//         feedItems.push({
-//           id: p.id,
-//           kind: "quiz",
-//           data: p,
-//           createdAt: p.createdAt,
-//           likes: 0,
-//           retweets: 0,
-//           answers: 0,
-//         });
-//       }
-
-//       // 新しい順にソート
-//       feedItems.sort((a, b) => b.createdAt - a.createdAt);
-
-//       setFeed(feedItems);
-//     } catch (e) {
-//       console.error("API /quizzes 取得に失敗しました", e);
-//     }
-//   })();
-// }, []);
 
   useEffect(() => {
     (async () => {
@@ -1476,21 +1379,6 @@ setProfileIsFollowing(false);
       setProfileIsFollowing(!!json.is_following);
     }
 
-    // ③ 自分の followIds も最新にしておく（ここがポイント）
-    // if (CURRENT_USER_ID) {
-    //   const followsRes = await fetch(
-    //     `${API_BASE}/follows?viewer_id=${encodeURIComponent(
-    //       String(CURRENT_USER_ID)
-    //     )}`,
-    //     { credentials: "include", headers: { "X-Requested-With": "XMLHttpRequest" } }
-    //   );
-    //   if (followsRes.ok) {
-    //     const json = await followsRes.json();
-    //     const ids: number[] = json.ids ?? [];
-    //     setFollowIds(ids);
-    //   }
-    // }
-
   } catch (e) {
     console.error("openProfile failed", e);
     setProfileError("プロフィール情報の取得に失敗しました");
@@ -1522,53 +1410,6 @@ const handleUserSearch = async () => {
   }
 };
 
-
-// const toggleFollow = async (targetId: number) => {
-//   if (!CURRENT_USER_ID || !targetId) return;
-
-//   try {
-//     const res = await fetch(`${API_BASE}/follows/toggle`, {
-//       method: "POST",
-//       headers: {
-//         "Content-Type": "application/json",
-//         "X-Requested-With": "XMLHttpRequest",
-//       },
-//       credentials: "include",
-//       body: JSON.stringify({
-//         user_id: CURRENT_USER_ID,
-//         target_user_id: targetId,
-//       }),
-//     });
-
-//     if (!res.ok) {
-//       console.error("toggleFollow failed status =", res.status);
-//       return;
-//     }
-
-//     const json = await res.json();
-//     const following: boolean = !!json.following;
-
-//     // フィード絞り込み用 followIds を更新
-//     setFollowIds((prev) => {
-//       if (following) {
-//         if (prev.includes(targetId)) return prev;
-//         return [...prev, targetId];
-//       } else {
-//         return prev.filter((id) => id !== targetId);
-//       }
-//     });
-
-//     // ★ 今見ているプロフィールがこの targetId なら、プロフィール側の表示も更新
-//     if (profileUserId === targetId) {
-//       setProfileIsFollowing(following);
-//       setProfileFollowerCount((prev) =>
-//         following ? prev + 1 : Math.max(0, prev - 1)
-//       );
-//     }
-//   } catch (e) {
-//     console.error("toggleFollow failed", e);
-//   }
-// };
 const toggleFollow = async (targetId: number) => {
   if (!CURRENT_USER_ID || !targetId) return;
 
@@ -1624,26 +1465,42 @@ const toggleFollow = async (targetId: number) => {
   const backToFolders = () => setMode("folders");
 
     // 追加：単発投稿の編集結果を適用
-  const applyEditSingle = (updated: QuizPost) => {
-    const id = updated.id;
+  const applyEditBundle = (updatedPosts: QuizPost[]) => {
+  if (!updatedPosts.length) return;
 
-    // posts（全問題の一覧）を更新
-    setPosts((prev) => prev.map((p) => (p.id === id ? updated : p)));
+  // ① posts テーブルを更新（id が一致するものを差し替え）
+  const map = new Map(updatedPosts.map((p) => [p.id, p]));
 
-    // feed（タイムライン）を更新
-    setFeed((prev) =>
-      prev.map((item) => {
-        if (item.id !== editFeedId) return item;
-        if (item.kind === "quiz") {
-          return { ...item, data: updated };
-        }
-        return item; // quizBundle / share は今は対象外
-      })
-    );
+  setPosts((prev) =>
+    prev.map((p) => {
+      const hit = map.get(p.id);
+      return hit ?? p;
+    })
+  );
 
-    // バックエンドにも保存（fire-and-forget）
-    bulkUpsertQuizzes([toQuizRow(updated)]).catch(() => {});
-  };
+  // ② feed を更新
+  setFeed((prev) =>
+    prev.map((item) => {
+      if (item.id !== editFeedId) return item;
+
+      if (item.kind === "quiz") {
+        // 単発編集：1件だけ入っている想定
+        return { ...item, data: updatedPosts[0] };
+      }
+
+      if (item.kind === "quizBundle") {
+        // まとめ編集：全部差し替え
+        return { ...item, data: updatedPosts };
+      }
+
+      return item;
+    })
+  );
+
+  // ③ DB も更新（まとめて upsert）
+  bulkUpsertQuizzes(updatedPosts.map(toQuizRow)).catch(() => {});
+};
+
 
 
   // 追加：まとめて投稿
@@ -1668,29 +1525,6 @@ const toggleFollow = async (targetId: number) => {
     postFeed(toFeedRow(item as any)).catch(() => {});
   };
 
-//    const visibleFeed = useMemo(() => {
-//   // 自分のID + フォロー中ユーザーID
-//   const allowed = new Set<number>([CURRENT_USER_ID, ...followIds]);
-
-//   return feed.filter((item) => {
-//     // 共有投稿は常に表示
-//     if (item.kind === "share") return true;
-
-//     let authorId: number | null | undefined;
-
-//     if (item.kind === "quiz") {
-//       authorId = item.data.author_id;
-//     } else if (item.kind === "quizBundle") {
-//       authorId = item.data[0]?.author_id;
-//     }
-
-//     // ★ author_id が入っていない古い投稿は「自分の投稿扱い」で表示
-//     if (authorId == null) return true;
-
-//     // ★ allowed（自分＋フォロー中）に含まれる投稿だけ表示
-//     return allowed.has(authorId);
-//   });
-// }, [feed, followIds]);
 const visibleFeed = useMemo(() => {
   // /api/quizzes が viewer_id に応じて
   // 「自分の全投稿＋フォロー中ユーザーの visibility != 1 の投稿」
@@ -1722,17 +1556,23 @@ const visibleFeed = useMemo(() => {
     postFeed(toFeedRow(item as any)).catch(() => {});
   };
 
-  const openEditForFeedItem = (item: FeedItem) => {
-    if (item.kind !== "quiz") {
-      // まとめ投稿（quizBundle）などは今は編集対象外。必要なら後で対応。
-      return;
-    }
+const openEditForFeedItem = (item: FeedItem) => {
+  if (item.kind === "quiz") {
+    // 単発 → 配列1件として扱う
+    setEditTargetPosts([item.data]);
+  } else if (item.kind === "quizBundle") {
+    // まとめ投稿 → そのまま配列で
+    setEditTargetPosts(item.data);
+  } else {
+    // share は編集対象外
+    return;
+  }
 
-    setEditTargetPost(item.data);   // この単発投稿を編集する
-    setEditFeedId(item.id);         // feed 上の id を覚えておく
-    setComposerMode("edit");        // モードを編集に
-    setComposerOpen(true);          // モーダルオープン
-  };
+  setEditFeedId(item.id);
+  setComposerMode("edit");
+  setComposerOpen(true);
+};
+
 
   const incLike = (id: string) => {
     setFeed((prev) =>
@@ -1810,6 +1650,8 @@ const visibleFeed = useMemo(() => {
       setMode("answer");
     };
 
+    // const first = item.data[0];
+
     return (
       <>
         {/* ▼ ここ全体がタップできる「ユーザー行」 */}
@@ -1850,22 +1692,22 @@ const visibleFeed = useMemo(() => {
           {new Date(item.createdAt).toLocaleString()} ・{" "}
           {item.data.type === "choice" ? "選択肢" : "テキスト入力"}
         </div>
-        <ActionBar
-          likes={item.likes}
-          retweets={item.retweets}
-          answers={item.answers}
-          onLike={() => incLike(item.id)}
-          onRT={() => incRT(item.id)}
-          onAnswer={handleAnswer}
-          // ★ 自分の投稿かどうか
-          isMine={item.data.author_id === CURRENT_USER_ID}
-          // ★ 自分の投稿なら編集メニューを有効化
-          onEdit={
-            item.data.author_id === CURRENT_USER_ID
-              ? () => openEditForFeedItem(item)
-              : undefined
-          }
-        />
+        
+        
+<ActionBar
+  likes={item.likes}
+  retweets={item.retweets}
+  answers={item.answers}
+  onLike={() => incLike(item.id)}
+  onRT={() => incRT(item.id)}
+  onAnswer={handleAnswer}
+  isMine={item.data.author_id === CURRENT_USER_ID}
+  onEdit={
+    item.data.author_id === CURRENT_USER_ID
+      ? () => openEditForFeedItem(item)
+      : undefined
+  }
+/>
 
       </>
     );
@@ -1934,6 +1776,12 @@ const visibleFeed = useMemo(() => {
           onLike={() => incLike(item.id)}
           onRT={() => incRT(item.id)}
           onAnswer={handleAnswer}
+            isMine={first?.author_id === CURRENT_USER_ID}
+  onEdit={
+    first?.author_id === CURRENT_USER_ID
+      ? () => openEditForFeedItem(item)
+      : undefined
+  }
         />
       </>
     );
@@ -2113,18 +1961,16 @@ const visibleFeed = useMemo(() => {
       </div>
 
       {/* 投稿モーダル */}
-      <Modal
-        open={composerOpen}
-        onClose={() => setComposerOpen(false)}
-      >
-        <Composer
-          mode={composerMode}                         // ★ 追加
-          initialPost={composerMode === "edit" ? editTargetPost : null} // ★ 追加
-          onPostBundle={addPostBundle}                // 新規時
-          onEditSingle={applyEditSingle}              // 編集確定時
-          onCancel={() => setComposerOpen(false)}
-        />
-      </Modal>
+      <Modal open={composerOpen} onClose={() => setComposerOpen(false)}>
+  <Composer
+    mode={composerMode}
+    initialPosts={composerMode === "edit" ? editTargetPosts : null}
+    onPostBundle={addPostBundle}        // 新規投稿
+    onEditBundle={applyEditBundle}      // 編集（単発・まとめ両方）
+    onCancel={() => setComposerOpen(false)}
+  />
+</Modal>
+
 
 
       {/* 共有メッセージ編集モーダル */}
@@ -2161,7 +2007,7 @@ const visibleFeed = useMemo(() => {
 onClick={() => {
             // ★ 新規投稿モードにリセットしてから開く
             setComposerMode("create");
-            setEditTargetPost(null);
+            setEditTargetPosts(null);
             setEditFeedId(null);
             setComposerOpen(true);
           }}
