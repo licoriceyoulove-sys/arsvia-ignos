@@ -38,7 +38,17 @@ import React, { useEffect, useMemo, useState } from "react";
 
 import { fromQuizRow } from "./api/mapper";
 // import { bulkUpsertQuizzes, postFeed, patchFeed, API_BASE } from "./api/client";
-import { getQuizzes, getUserQuizzes, bulkUpsertQuizzes, postFeed, patchFeed, API_BASE, searchUsers } from "./api/client";
+import {
+  getQuizzes,
+  getUserQuizzes,
+  bulkUpsertQuizzes,
+  postFeed,
+  patchFeed,
+  API_BASE,
+  searchUsers,
+  deleteQuizzes,   // ★追加
+} from "./api/client";
+
 import type { UserSearchResult } from "./api/client";
 import { toQuizRow, toFeedRow } from "./api/mapper";
 import axios from "axios";
@@ -135,7 +145,7 @@ const iconUrl = (name: string) => `./build/icons/${name}.png`;
 const Composer: React.FC<{
   onCancel: () => void;
   onPostBundle?: (posts: QuizPost[]) => void;   // 新規まとめ投稿
-  onEditBundle?: (posts: QuizPost[]) => void;   // 編集（単発/まとめ）
+  onEditBundle?: (payload: { posts: QuizPost[]; deletedIds: string[] }) => void;
   mode?: "create" | "edit";
   initialPosts?: QuizPost[] | null;             // 編集対象（0 or 複数）
 }> = ({
@@ -276,26 +286,25 @@ const [drafts, setDrafts] = useState<Draft[]>(() => {
   }, [drafts, sharedTags, visibility]);
 
   // submitMulti も置き換え
-  const submitMulti = () => {
+const submitMulti = () => {
   const baseTime = initialPosts?.[0]?.createdAt ?? Date.now();
   const originalBundleId = initialPosts?.[0]?.bundleId;
 
-   const bundleIdBase =
+  const bundleIdBase =
     originalBundleId ?? (mode === "create" ? uid() : undefined);
-    
-  // Draft → QuizPost 変換（id は元のものを優先）
+
   const posts = drafts
     .map((d, idx) => {
       const p = toQuizPostWithSharedTags(d, sharedTags, visibility);
       if (!p) return null;
 
+      // もともとあった id があればそれを優先（編集時）
       const id = d.id ?? initialPosts?.[idx]?.id ?? uid();
-      // const bundleId = originalBundleId ?? p.bundleId;
 
       return {
         ...p,
         id,
-bundleId: bundleIdBase,
+        bundleId: bundleIdBase,
         bundleOrder: idx,
         createdAt: initialPosts?.[idx]?.createdAt ?? baseTime + idx,
       } as QuizPost;
@@ -304,8 +313,15 @@ bundleId: bundleIdBase,
 
   if (!posts.length || posts.length > 10) return;
 
+  // ★ 元のIDたち
+  const originalIds = (initialPosts ?? []).map((p) => p.id);
+  // ★ 更新後のIDたち
+  const updatedIds = posts.map((p) => p.id);
+  // ★ 元にあったけど今ない → 削除されたID
+  const deletedIds = originalIds.filter((id) => !updatedIds.includes(id));
+
   if (mode === "edit" && onEditBundle) {
-    onEditBundle(posts); // ★ 単発/まとめ共通
+    onEditBundle({ posts, deletedIds });
     onCancel();
     return;
   }
@@ -315,6 +331,7 @@ bundleId: bundleIdBase,
     onCancel();
   }
 };
+
 
 
 
@@ -454,27 +471,23 @@ removable={drafts.length > 1}
         />
 
         {/* 追加ボタン（追加後は新規問題がアクティブに） */}
-        {mode === "create" && (
+        {drafts.length < 10 && (
           <div>
-            {drafts.length < 10 && (
-  <div>
-    <button
-      onClick={() =>
-        setDrafts((prev) => {
-          const next = [...prev, makeEmptyDraft()];
-          setActiveIdx(next.length - 1);
-          return next;
-        })
-      }
-      className="text-blue-600 text-sm"
-    >
-      + 問題を追加
-    </button>
-  </div>
-)}
-
+            <button
+              onClick={() =>
+                setDrafts((prev) => {
+                  const next = [...prev, makeEmptyDraft()];
+                  setActiveIdx(next.length - 1);
+                  return next;
+                })
+              }
+              className="text-blue-600 text-sm"
+            >
+              + 問題を追加
+            </button>
           </div>
         )}
+
       </div>
     </div>
   );
@@ -1465,41 +1478,70 @@ const toggleFollow = async (targetId: number) => {
   const backToFolders = () => setMode("folders");
 
     // 追加：単発投稿の編集結果を適用
-  const applyEditBundle = (updatedPosts: QuizPost[]) => {
-  if (!updatedPosts.length) return;
+  // 追加：単発/まとめ投稿の編集結果を適用（追加・更新・削除を反映）
+  const applyEditBundle = ({
+    posts: updatedPosts,
+    deletedIds,
+  }: {
+    posts: QuizPost[];
+    deletedIds: string[];
+  }) => {
+    // ① posts state を更新（削除 + 更新 + 追加）
+    setPosts((prev) => {
+      const deletedSet = new Set(deletedIds);
+      const updatedMap = new Map(updatedPosts.map((p) => [p.id, p]));
 
-  // ① posts テーブルを更新（id が一致するものを差し替え）
-  const map = new Map(updatedPosts.map((p) => [p.id, p]));
+      // 既存のうち「削除されていない」ものを残しつつ、更新対象は差し替え
+      const kept = prev
+        .filter((p) => !deletedSet.has(p.id))
+        .map((p) => updatedMap.get(p.id) ?? p);
 
-  setPosts((prev) =>
-    prev.map((p) => {
-      const hit = map.get(p.id);
-      return hit ?? p;
-    })
-  );
+      // prev に存在しなかった新規ID（編集で追加された問題）を append
+      const prevIds = new Set(prev.map((p) => p.id));
+      const added = updatedPosts.filter((p) => !prevIds.has(p.id));
 
-  // ② feed を更新
-  setFeed((prev) =>
-    prev.map((item) => {
-      if (item.id !== editFeedId) return item;
+      return [...kept, ...added];
+    });
 
-      if (item.kind === "quiz") {
-        // 単発編集：1件だけ入っている想定
-        return { ...item, data: updatedPosts[0] };
-      }
+    // ② feed を更新（単発 / まとめ両対応）
+    setFeed((prev) =>
+      prev
+        .map((item) => {
+          if (item.id !== editFeedId) return item;
 
-      if (item.kind === "quizBundle") {
-        // まとめ編集：全部差し替え
-        return { ...item, data: updatedPosts };
-      }
+          if (item.kind === "quiz") {
+            // 単発編集：0件（全削除）の場合は後で feed からも消す
+            return updatedPosts[0]
+              ? { ...item, data: updatedPosts[0] }
+              : item;
+          }
 
-      return item;
-    })
-  );
+          if (item.kind === "quizBundle") {
+            // まとめ編集：data を差し替え
+            return { ...item, data: updatedPosts };
+          }
 
-  // ③ DB も更新（まとめて upsert）
-  bulkUpsertQuizzes(updatedPosts.map(toQuizRow)).catch(() => {});
-};
+          return item;
+        })
+        .filter((item) => {
+          // 単発投稿が削除された場合：updatedPosts が空なら feed からも削除
+          if (item.id === editFeedId && item.kind === "quiz") {
+            return updatedPosts.length > 0;
+          }
+          // まとめ投稿で全問削除されてしまった場合：feed から削除
+          if (item.id === editFeedId && item.kind === "quizBundle") {
+            const bundle = item as FeedQuizBundleItem;
+            return bundle.data.length > 0;
+          }
+          return true;
+        })
+    );
+
+    // ③ DB: 更新されたものは upsert、削除されたものは delete
+    bulkUpsertQuizzes(updatedPosts.map(toQuizRow)).catch(() => {});
+    deleteQuizzes(deletedIds).catch(() => {});
+  };
+
 
 
 

@@ -43,6 +43,42 @@ Route::get('/db-ping', function () {
    - GET  /api/quizzes        : 一覧取得（users.display_name を join）
    - POST /api/quizzes/bulk   : まとめて保存（投稿）
 ============================================================ */
+/**
+ * POST /api/quizzes/bulk-delete
+ * body: { ids: string[] }
+ * まとめてクイズを削除する
+ */
+Route::post('/quizzes/bulk-delete', function (Request $request) {
+    $ids = $request->input('ids', []);
+
+    if (!is_array($ids) || empty($ids)) {
+        return response()->json([
+            'ok'      => false,
+            'message' => 'ids は配列で指定してください',
+        ], 422);
+    }
+
+    // 必要ならここでバリデーション（文字列配列か？など）
+    $ids = array_filter($ids, fn($v) => is_string($v) && $v !== '');
+
+    if (empty($ids)) {
+        return response()->json([
+            'ok'      => false,
+            'message' => '有効な id がありません',
+        ], 422);
+    }
+
+    // ★ 現状の設計に合わせて、所有者チェックなしで単純削除
+    // （認証を入れる場合はここに where('author_id', $userId) などを足す）
+    $deleted = DB::table('quizzes')
+        ->whereIn('id', $ids)
+        ->delete();
+
+    return response()->json([
+        'ok'      => true,
+        'deleted' => $deleted,
+    ]);
+})->withoutMiddleware(\App\Http\Middleware\VerifyCsrfToken::class);
 
 /**
  * GET /api/quizzes

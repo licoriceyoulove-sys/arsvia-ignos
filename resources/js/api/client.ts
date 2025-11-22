@@ -141,6 +141,20 @@ export async function patchFeed(
   await assertOk(res, "patchFeed");
 }
 
+export async function deleteQuizzes(ids: string[]): Promise<void> {
+  if (!ids.length) return;
+
+  await fetch(`${API_BASE}/quizzes/bulk-delete`, {
+    method: "POST", // DELETE + body 対応なら DELETE でもOK
+    headers: {
+      "Content-Type": "application/json",
+      "X-Requested-With": "XMLHttpRequest",
+    },
+    credentials: "include",
+    body: JSON.stringify({ ids }),
+  });
+}
+
 /* =========================================
    ヘルスチェック（任意）
 ========================================= */
