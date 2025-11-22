@@ -2016,8 +2016,7 @@ const visibleFeed = useMemo(() => {
         onNotify={() => setMode("notifications")}
   onProfile={() => {
     if (!CURRENT_USER_ID) return; // 未ログインなら何もしない
-    setProfileUserId(CURRENT_USER_ID);
-    setMode("profile");
+    openProfile(CURRENT_USER_ID);
   }}
       />
     </div>
