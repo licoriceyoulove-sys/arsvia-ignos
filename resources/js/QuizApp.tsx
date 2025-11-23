@@ -64,7 +64,7 @@ import type {
   FeedItem,
   FeedQuizBundleItem,
 } from "./types/quiz";
-import { Header } from "./components/layout/Header";
+import Header from "./components/layout/Header";
 import { BottomNav } from "./components/layout/BottomNav";
 import { Modal } from "./components/layout/Modal";
 
@@ -1494,10 +1494,6 @@ const QuizRunner: React.FC<{
 };
 
 /* =========================
-   タイムラインのアクション
-========================= */
-
-/* =========================
    メインアプリ
 ========================= */
 export default function QuizApp() {
@@ -1541,6 +1537,8 @@ const [categoryLarges, setCategoryLarges] = useState<CategoryLarge[]>([]);
 const [categoryMiddles, setCategoryMiddles] = useState<CategoryMiddle[]>([]);
 const [categorySmalls, setCategorySmalls] = useState<CategorySmall[]>([]);
 
+const [isSidebarOpen, setSidebarOpen] = useState(false);
+const [isToolsOpen, setToolsOpen] = useState(false);
 // QuizApp コンポーネント内
 
 const loadQuizzesAndFeed = async () => {
@@ -1658,30 +1656,6 @@ useEffect(() => {
   };
 }, []);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const data = await getQuizzes(CURRENT_USER_ID);
-        console.log("API /quizzes ->", data); // ← ここに test1 などが出ればOK
-      } catch (e) {
-        console.error(e);
-      }
-    })();
-  }, []);
-
-//   useEffect(() => {
-//   const fetchCategoryLarges = async () => {
-//     try {
-//       const data = await getCategoryLarges();
-//       setCategoryLarges(data);
-//       console.log("DEBUG categoryLarges =", data);
-//     } catch (e) {
-//       console.error("大カテゴリ取得に失敗しました", e);
-//     }
-//   };
-
-//   fetchCategoryLarges();
-// }, []);
 useEffect(() => {
   const fetchCategories = async () => {
     try {
@@ -2004,7 +1978,10 @@ const openEditForFeedItem = (item: FeedItem) => {
 
   return (
     <div className="min-h-[100dvh] bg-white text-gray-900 pb-16">
-      <Header />
+      <Header
+  onOpenSidebar={() => setSidebarOpen(true)}
+  onOpenTools={() => setToolsOpen(true)}
+/>
 
       <div className="max-w-md mx-auto">
         {/* HOME */}
@@ -2482,6 +2459,109 @@ onClick={() => {
     openProfile(CURRENT_USER_ID);
   }}
       />
+
+      {/* サイドバー（Bluesky 風） */}
+{isSidebarOpen && (
+  <div className="fixed inset-0 z-30 flex">
+    {/* 左のサイドバー本体 */}
+    <div className="w-72 max-w-[80%] h-full bg-white shadow-xl border-r border-gray-200 flex flex-col">
+      <div className="h-12 px-4 flex items-center justify-between border-b border-gray-100">
+        <span className="text-sm font-semibold">メニュー</span>
+        <button
+          className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-gray-100"
+          onClick={() => setSidebarOpen(false)}
+        >
+          ×
+        </button>
+      </div>
+
+      <nav className="flex-1 overflow-y-auto p-2 text-sm">
+        {/* ここはお好みでメニュー項目を増やしてください */}
+        <button
+          className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100"
+          onClick={() => {
+            setMode("home");
+            setSidebarOpen(false);
+          }}
+        >
+          ホーム
+        </button>
+        <button
+          className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100"
+          onClick={() => {
+            setMode("search");
+            setSidebarOpen(false);
+          }}
+        >
+          検索
+        </button>
+        <button
+          className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100"
+          onClick={() => {
+            setMode("folders");
+            setSidebarOpen(false);
+          }}
+        >
+          タグから探す
+        </button>
+        {CURRENT_USER_ID && (
+          <button
+            className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100"
+            onClick={() => {
+              openProfile(CURRENT_USER_ID);
+              setSidebarOpen(false);
+            }}
+          >
+            マイプロフィール
+          </button>
+        )}
+      </nav>
+    </div>
+
+    {/* 右側の半透明オーバーレイ：クリックで閉じる */}
+    <button
+      className="flex-1 h-full bg-black/30"
+      onClick={() => setSidebarOpen(false)}
+      aria-label="メニューを閉じる"
+    />
+  </div>
+)}
+
+{/* ツールパレット（右上ボタン用） */}
+{isToolsOpen && (
+  <div className="fixed inset-0 z-40 flex items-start justify-end pt-14 pr-3">
+    {/* 背景をクリックすると閉じる */}
+    <div
+      className="absolute inset-0 bg-black/20"
+      onClick={() => setToolsOpen(false)}
+    />
+
+    {/* パレット本体 */}
+    <div className="relative z-10 w-64 bg-white rounded-xl shadow-xl border border-gray-200 p-3 text-sm">
+      <div className="flex items-center justify-between mb-2">
+        <span className="font-semibold">ツール</span>
+        <button
+          className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-gray-100"
+          onClick={() => setToolsOpen(false)}
+        >
+          ×
+        </button>
+      </div>
+
+      <div className="space-y-1">
+        {/* ここに便利機能を追加していく */}
+        <button className="w-full text-left px-2 py-1 rounded hover:bg-gray-100">
+          今日の復習問題を出す（仮）
+        </button>
+        <button className="w-full text-left px-2 py-1 rounded hover:bg-gray-100">
+          ランダム出題（仮）
+        </button>
+        {/* ・・・今後の機能をここに */}
+      </div>
+    </div>
+  </div>
+)}
+
     </div>
   );
 }
