@@ -49,9 +49,10 @@ import {
   deleteQuizzes,   // ★追加
   getCategoryLarges,
   getCategoryMiddles,
+  getCategorySmalls,
 } from "./api/client";
 
-import type { UserSearchResult, CategoryLarge, CategoryMiddle, } from "./api/client";
+import type { UserSearchResult, CategoryLarge, CategoryMiddle, CategorySmall, } from "./api/client";
 import { toQuizRow, toFeedRow } from "./api/mapper";
 import axios from "axios";
 import type {
@@ -652,7 +653,8 @@ const FolderList: React.FC<{
   onShare: (tag: string) => void;
   categoryLarges: CategoryLarge[];
   categoryMiddles: CategoryMiddle[];
-}> = ({ posts, onStartQuiz, onShare, categoryLarges = [], categoryMiddles }) => {
+  categorySmalls: CategorySmall[];
+}> = ({ posts, onStartQuiz, onShare, categoryLarges = [], categoryMiddles, categorySmalls, }) => {
   const [keywordInput, setKeywordInput] = useState("");
   const [keyword, setKeyword] = useState("");
 
@@ -783,32 +785,80 @@ const FolderList: React.FC<{
 
           {/* 中カテゴリリスト（開いているときだけ表示） */}
           {isOpen && (
-            <div className="border-t border-gray-100">
-              {middles.length === 0 && (
-                <div className="px-3 py-2 text-[11px] text-gray-400">
-                  この大カテゴリには中カテゴリがありません。
+  <div className="border-t border-gray-100">
+    {middles.length === 0 && (
+      <div className="px-3 py-2 text-[11px] text-gray-400">
+        この大カテゴリには中カテゴリがありません。
+      </div>
+    )}
+    {middles.map((mid) => {
+      const middleOpen = openMiddleId === mid.id;
+      const smalls = categorySmalls.filter(
+        (s) => s.middle_id === mid.id
+      );
+
+      return (
+        <div key={mid.id} className="border-t border-gray-50">
+          {/* ▼ 中カテゴリ行：クリックで自分の小カテゴリを開閉 */}
+          <button
+            type="button"
+            onClick={() =>
+              setOpenMiddleId((prev) => (prev === mid.id ? null : mid.id))
+            }
+            className="w-full flex items-center justify-between px-4 py-2 text-sm"
+          >
+            <div className="flex-1 text-left">
+              <div>{mid.name_jp}</div>
+              {mid.description && (
+                <div className="text-[11px] text-gray-500">
+                  {mid.description}
                 </div>
               )}
-              {middles.map((mid) => (
+              {mid.name_en && (
+                <div className="text-[11px] text-gray-400">
+                  {mid.name_en}
+                </div>
+              )}
+            </div>
+            <div className="ml-2 text-[11px] text-gray-500">
+              {middleOpen ? "－" : "＋"}
+            </div>
+          </button>
+
+          {/* ▼ 小カテゴリリスト（この中カテゴリが開いているときだけ） */}
+          {middleOpen && (
+            <div className="bg-gray-50">
+              {smalls.length === 0 && (
+                <div className="px-6 py-2 text-[11px] text-gray-400">
+                  この中カテゴリには小カテゴリがありません。
+                </div>
+              )}
+              {smalls.map((sm) => (
                 <div
-                  key={mid.id}
-                  className="px-4 py-2 text-sm border-t border-gray-50"
+                  key={sm.id}
+                  className="px-6 py-2 text-[13px] border-t border-gray-100"
                 >
-                  <div>{mid.name_jp}</div>
-                  {mid.description && (
+                  <div>{sm.name_jp}</div>
+                  {sm.description && (
                     <div className="text-[11px] text-gray-500">
-                      {mid.description}
+                      {sm.description}
                     </div>
                   )}
-                  {mid.name_en && (
+                  {sm.name_en && (
                     <div className="text-[11px] text-gray-400">
-                      {mid.name_en}
+                      {sm.name_en}
                     </div>
                   )}
                 </div>
               ))}
             </div>
           )}
+        </div>
+      );
+    })}
+  </div>
+)}
+
         </div>
       );
     })}
@@ -1393,6 +1443,7 @@ const [profileIsFollowing, setProfileIsFollowing] = useState(false);
 
 const [categoryLarges, setCategoryLarges] = useState<CategoryLarge[]>([]);
 const [categoryMiddles, setCategoryMiddles] = useState<CategoryMiddle[]>([]);
+const [categorySmalls, setCategorySmalls] = useState<CategorySmall[]>([]);
 
 // QuizApp コンポーネント内
 
@@ -1523,27 +1574,26 @@ useEffect(() => {
 // }, []);
 useEffect(() => {
   const fetchCategories = async () => {
-    // ① 先に大カテゴリだけでも確実に読み込む
     try {
-      const larges = await getCategoryLarges();
+      const [larges, middles, smalls] = await Promise.all([
+        getCategoryLarges(),
+        getCategoryMiddles(),
+        getCategorySmalls(),      // ★ 追加
+      ]);
       setCategoryLarges(larges);
-      console.log("DEBUG categoryLarges =", larges);
-    } catch (e) {
-      console.error("大カテゴリ取得に失敗しました", e);
-    }
-
-    // ② 中カテゴリは失敗しても致命的ではないので別 try/catch
-    try {
-      const middles = await getCategoryMiddles();
       setCategoryMiddles(middles);
+      setCategorySmalls(smalls);  // ★ 追加
+      console.log("DEBUG categoryLarges =", larges);
       console.log("DEBUG categoryMiddles =", middles);
+      console.log("DEBUG categorySmalls =", smalls);
     } catch (e) {
-      console.error("中カテゴリ取得に失敗しました（大カテゴリは表示されます）", e);
+      console.error("カテゴリ取得に失敗しました", e);
     }
   };
 
   fetchCategories();
 }, []);
+
 
 
 
@@ -2065,6 +2115,7 @@ const openEditForFeedItem = (item: FeedItem) => {
             // categoryTree={[]}
             categoryLarges={categoryLarges}
             categoryMiddles={categoryMiddles}
+            categorySmalls={categorySmalls}
           />
         )}
 

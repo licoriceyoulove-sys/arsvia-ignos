@@ -208,6 +208,15 @@ export type CategoryMiddle = {
   description: string | null;
 };
 
+export type CategorySmall = {
+  id: number;
+  middle_id: number;
+  code: string;
+  name_jp: string;
+  name_en: string | null;
+  description: string | null;
+};
+
 // 追加：大カテゴリ一覧取得
 export const getCategoryLarges = async (): Promise<CategoryLarge[]> => {
   const res = await axios.get(`${API_BASE}/category-larges`);
@@ -218,3 +227,10 @@ export const getCategoryMiddles = async (): Promise<CategoryMiddle[]> => {
   const res = await axios.get(`${API_BASE}/category-middles`);
   return res.data as CategoryMiddle[];
 };
+
+export async function getCategorySmalls(): Promise<CategorySmall[]> {
+  const res = await axios.get(`${API_BASE}/category-smalls`, {
+    withCredentials: true,
+  });
+  return res.data as CategorySmall[];
+}

@@ -477,3 +477,38 @@ Route::get('/category-middles', function () {
         ], 500);
     }
 });
+
+/**
+ * 小カテゴリ一覧取得
+ * GET /api/category-smalls
+ */
+Route::get('/category-smalls', function () {
+    try {
+        $smalls = DB::table('category_smalls')
+            ->where('is_active', 1)        // 有効のみ
+            ->whereNull('deleted_at')      // 論理削除されていないもの
+            ->select(
+                'id',
+                'middle_id',               // ★ 中カテゴリID
+                'code',
+                'name_jp',
+                'name_en',
+                'description'
+            )
+            ->orderBy('middle_id')
+            ->orderBy('sort_order')
+            ->orderBy('id')
+            ->get();
+
+        return response()->json($smalls);
+    } catch (\Throwable $e) {
+        \Log::error('GET /api/category-smalls failed', [
+            'error' => $e->getMessage(),
+        ]);
+
+        return response()->json([
+            'ok'      => false,
+            'message' => 'category_smalls query failed',
+        ], 500);
+    }
+});
