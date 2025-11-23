@@ -18,6 +18,9 @@ export type QuizPost = {
     createdAt: number;
     author_id?: number;
     visibility: Visibility;
+
+    category_tag?: string | null;
+    
     authorDisplayName?: string;
     authorIgnosId?: string | null;
 

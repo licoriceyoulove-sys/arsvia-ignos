@@ -15,6 +15,9 @@ export type QuizRowFromApi = {
   created_at: string;
   author_id?: number | string | null;
   visibility?: number | null;
+
+  category_tag: string | null;
+
   author_display_name?: string | null;
   author_ignos_id?: string | null;
   bundle_id?: string | null;
@@ -43,6 +46,7 @@ export const fromQuizRow = (r: QuizRowFromApi): QuizPost => {
     author_id: authorId,
     visibility: (r.visibility as Visibility) ?? 1,
     // JOIN で取ってきた display_name / ignos_id
+    category_tag: r.category_tag ?? undefined,
     authorDisplayName: r.author_display_name ?? undefined,
     authorIgnosId: r.author_ignos_id ?? undefined,
       bundleId: r.bundle_id ?? null,
@@ -63,6 +67,7 @@ export const toQuizRow = (p: QuizPost) => ({
   created_at: new Date(p.createdAt).toISOString(),
   author_id: p.author_id ?? null,
   visibility: p.visibility ?? 1,
+  category_tag: p.category_tag ?? null,
   // ★ display_name はサーバー側で users から引くので送らない
     bundle_id: p.bundleId ?? null,
   bundle_order: p.bundleOrder ?? 0,
