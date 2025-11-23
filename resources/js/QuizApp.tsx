@@ -47,9 +47,10 @@ import {
   API_BASE,
   searchUsers,
   deleteQuizzes,   // ★追加
+  getCategoryLarges,
 } from "./api/client";
 
-import type { UserSearchResult } from "./api/client";
+import type { UserSearchResult, CategoryLarge } from "./api/client";
 import { toQuizRow, toFeedRow } from "./api/mapper";
 import axios from "axios";
 import type {
@@ -625,11 +626,40 @@ const MultiEditor: React.FC<{
 /* =========================
    フォルダ（タグ）一覧
 ========================= */
+// カテゴリツリー用の型
+type CategorySmallNode = {
+  id: number;
+  name: string;     // 小カテゴリ名
+  tags: string[];   // この小カテゴリに紐づくタグ一覧
+};
+
+type CategoryMiddleNode = {
+  id: number;
+  name: string;           // 中カテゴリ名
+  smalls: CategorySmallNode[];
+};
+
+type CategoryLargeNode = {
+  id: number;
+  name: string;           // 大カテゴリ名
+  middles: CategoryMiddleNode[];
+};
+
 const FolderList: React.FC<{
   posts: QuizPost[];
   onStartQuiz: (tag: string) => void;
   onShare: (tag: string) => void;
-}> = ({ posts, onStartQuiz, onShare }) => {
+  // ★ 追加：カテゴリツリー（任意）
+  categoryLarges: CategoryLarge[];
+}> = ({ posts, onStartQuiz, onShare, categoryLarges = [] }) => {
+  const [keywordInput, setKeywordInput] = useState("");
+  const [keyword, setKeyword] = useState("");
+
+  // 大 / 中 / 小 カテゴリの開閉状態
+  const [openLargeId, setOpenLargeId] = useState<number | null>(null);
+  const [openMiddleId, setOpenMiddleId] = useState<number | null>(null);
+  const [openSmallId, setOpenSmallId] = useState<number | null>(null);
+
   const tagCount = useMemo(() => {
     const map = new Map<string, number>();
     posts.forEach((p) =>
@@ -638,37 +668,115 @@ const FolderList: React.FC<{
     return Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
   }, [posts]);
 
+  // 検索キーワードでタグを絞り込み
+  const filteredTagCount = useMemo(() => {
+    if (!keyword.trim()) return tagCount;
+    const kw = keyword.trim();
+    return tagCount.filter(([tag]) => tag.includes(kw));
+  }, [tagCount, keyword]);
+
+  const handleSearchClick = () => {
+    setKeyword(keywordInput.trim());
+  };
+
   return (
     <Card>
       <SectionTitle title="タグから探す" />
-      <div className="px-4 pb-4 space-y-2">
-        {tagCount.length === 0 && (
-          <div className="text-gray-500 text-sm">まだ投稿がありません</div>
-        )}
-        {tagCount.map(([tag, count]) => (
-          <div key={tag} className="flex items-center gap-2">
-            <TagChip
-              tag={`${tag}（${count}）`}
-              onClick={() => onStartQuiz(tag)}
-            />
-            <button
-              onClick={() => onStartQuiz(tag)}
-              className="px-3 py-1 rounded-full text-sm bg-black text-white"
-            >
-              Answer
-            </button>
-            <button
-              onClick={() => onShare(tag)}
-              className="px-3 py-1 rounded-full text-sm border"
-            >
-              Look！
-            </button>
-          </div>
-        ))}
+      <div className="px-4 pb-4 space-y-4">
+        {/* ▼ 検索フォーム（ユーザー検索と同じようなイメージ） */}
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={keywordInput}
+            onChange={(e) => setKeywordInput(e.target.value)}
+            placeholder="タグを検索"
+            className="flex-1 px-3 py-2 border rounded-xl text-sm bg-gray-50 border-gray-200"
+          />
+          <button
+            type="button"
+            onClick={handleSearchClick}
+            className="px-4 py-2 rounded-xl bg-black text-white text-sm font-bold"
+          >
+            検索
+          </button>
+        </div>
+
+        {/* ▼ 検索結果（＝タグ一覧） */}
+        <div className="space-y-2">
+          {filteredTagCount.length === 0 && (
+            <div className="text-gray-500 text-sm">
+              該当するタグがありません
+            </div>
+          )}
+          {filteredTagCount.map(([tag, count]) => (
+            <div key={tag} className="flex items-center gap-2">
+              <TagChip
+                tag={`${tag}（${count}）`}
+                onClick={() => onStartQuiz(tag)}
+              />
+              <button
+                onClick={() => onStartQuiz(tag)}
+                className="px-3 py-1 rounded-full text-sm bg-black text-white"
+              >
+                Answer
+              </button>
+              <button
+                onClick={() => onShare(tag)}
+                className="px-3 py-1 rounded-full text-sm border"
+              >
+                Look！
+              </button>
+            </div>
+          ))}
+        </div>
+
+        {/* ▼ カテゴリから探す */}
+<div className="pt-4 border-t">
+  <div className="text-sm font-bold mb-2">カテゴリから探す</div>
+
+  {categoryLarges.length === 0 && (
+    <div className="text-xs text-gray-500">
+      大カテゴリマスタがまだ登録されていません。
+    </div>
+  )}
+
+  <div className="space-y-2">
+    {categoryLarges.map((c) => (
+      <div
+        key={c.id}
+        className="flex items-center justify-between px-3 py-2 rounded-xl border border-gray-200 bg-white"
+      >
+        {/* 左側（日本語名 / 概要 / 英語名） */}
+        <div className="flex-1">
+          <div className="text-sm">{c.name_jp}</div>
+
+          {c.description && (
+            <div className="text-[11px] text-gray-500">
+              {c.description}
+            </div>
+          )}
+
+          {c.name_en && (
+            <div className="text-[11px] text-gray-400">
+              {c.name_en}
+            </div>
+          )}
+        </div>
+
+        {/* 右側（後で問題数を表示できる場所） */}
+        <div className="ml-2 text-[11px] text-gray-400 whitespace-nowrap">
+          0問
+        </div>
+      </div>
+    ))}
+  </div>
+</div>
+
       </div>
     </Card>
   );
 };
+
 
 /* =========================
    クイズ実行
@@ -1239,6 +1347,8 @@ const [profileFollowingCount, setProfileFollowingCount] = useState(0);
 const [profileFollowerCount, setProfileFollowerCount] = useState(0);
 const [profileIsFollowing, setProfileIsFollowing] = useState(false);
 
+const [categoryLarges, setCategoryLarges] = useState<CategoryLarge[]>([]);
+
 // QuizApp コンポーネント内
 
 const loadQuizzesAndFeed = async () => {
@@ -1352,6 +1462,21 @@ useEffect(() => {
       }
     })();
   }, []);
+
+  useEffect(() => {
+  const fetchCategoryLarges = async () => {
+    try {
+      const data = await getCategoryLarges();
+      setCategoryLarges(data);
+      console.log("DEBUG categoryLarges =", data);
+    } catch (e) {
+      console.error("大カテゴリ取得に失敗しました", e);
+    }
+  };
+
+  fetchCategoryLarges();
+}, []);
+
 
   const startQuiz = (tag: string) => {
     setSelectedTag(tag);
@@ -1867,6 +1992,8 @@ const openEditForFeedItem = (item: FeedItem) => {
             posts={posts}
             onStartQuiz={startQuiz}
             onShare={openShare}
+            categoryTree={[]}
+            categoryLarges={categoryLarges}
           />
         )}
 
@@ -1897,7 +2024,7 @@ const openEditForFeedItem = (item: FeedItem) => {
           type="text"
           value={userKeyword}
           onChange={(e) => setUserKeyword(e.target.value)}
-          placeholder="ユーザー名 / イグノスID を検索"
+          placeholder="ユーザー名 / IgnosID を検索"
           className="flex-1 px-3 py-2 border rounded-xl text-sm bg-gray-50 border-gray-200"
         />
         <button

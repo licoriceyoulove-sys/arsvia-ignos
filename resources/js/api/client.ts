@@ -5,6 +5,7 @@ const RAW_BASE = import.meta.env.VITE_API_BASE || "/api";
 export const API_BASE = (RAW_BASE as string).replace(/\/$/, "");
 console.log("VITE_API_BASE =", API_BASE);
 import type { QuizRowFromApi } from "./mapper";
+import axios from "axios";
 
 // 共通: fetch 失敗時にサーバの応答も添えて投げる
 const assertOk = async (res: Response, label: string) => {
@@ -190,3 +191,17 @@ export async function getFollows() {
     follows: number[];
   }>;
 }
+
+export type CategoryLarge = {
+  id: number;
+  name_jp: string;
+  name_en: string | null;
+  description: string | null;
+  // 将来的に問題数を返したくなったらここに total_posts?: number; を足す
+};
+
+// 追加：大カテゴリ一覧取得
+export const getCategoryLarges = async (): Promise<CategoryLarge[]> => {
+  const res = await axios.get(`${API_BASE}/category-larges`);
+  return res.data as CategoryLarge[];
+};

@@ -418,3 +418,27 @@ Route::get('/users/{id}/follow-stats', function (Request $request, int $id) {
     ]);
 });
 
+/**
+ * 大カテゴリ一覧取得
+ * GET /api/category-larges
+ */
+Route::get('/category-larges', function () {
+    try {
+        // ★ まずは余計な where / orderBy は付けずに、テーブルから全件取得だけやってみる
+        $larges = DB::table('category_larges')   // ← テーブル名が本当にこれか要確認（後述）
+            ->select('id', 'name_jp', 'name_en', 'description')
+            ->get();
+
+        return response()->json($larges);
+    } catch (\Throwable $e) {
+        // デバッグ用：エラー内容をログに出して、簡単なメッセージを返す
+        \Log::error('GET /api/category-larges failed', [
+            'error' => $e->getMessage(),
+        ]);
+
+        return response()->json([
+            'ok' => false,
+            'message' => 'category_larges query failed',
+        ], 500);
+    }
+});
