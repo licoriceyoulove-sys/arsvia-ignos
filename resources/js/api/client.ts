@@ -200,8 +200,21 @@ export type CategoryLarge = {
   // 将来的に問題数を返したくなったらここに total_posts?: number; を足す
 };
 
+export type CategoryMiddle = {
+  id: number;
+  large_id: number;             // どの大カテゴリに属するか
+  name_jp: string;
+  name_en: string | null;
+  description: string | null;
+};
+
 // 追加：大カテゴリ一覧取得
 export const getCategoryLarges = async (): Promise<CategoryLarge[]> => {
   const res = await axios.get(`${API_BASE}/category-larges`);
   return res.data as CategoryLarge[];
+};
+
+export const getCategoryMiddles = async (): Promise<CategoryMiddle[]> => {
+  const res = await axios.get(`${API_BASE}/category-middles`);
+  return res.data as CategoryMiddle[];
 };
