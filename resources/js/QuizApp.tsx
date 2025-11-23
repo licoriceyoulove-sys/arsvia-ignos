@@ -2023,36 +2023,49 @@ const openEditForFeedItem = (item: FeedItem) => {
     const mainTag = item.data.hashtags?.[0];
     const title =
       mainTag != null && mainTag !== ""
-        ? `${mainTag}に関する問題` // mainTag は "#英語" 形式なのでそのまま使う
+        ? `${mainTag}に関する問題`
         : item.data.question;
 
-    // ★ 回答開始ハンドラ（本文タップ & ボタンで共通）
+    // 回答開始ハンドラ（本文タップ & ボタンで共通）
     const handleAnswer = () => {
       incAnswer(item.id);
       setAnswerPool([item.data]);
       setMode("answer");
     };
 
-    // const first = item.data[0];
-
     return (
       <>
-        {/* ▼ ここ全体がタップできる「ユーザー行」 */}
-        <button
-          type="button"
-          onClick={() => openProfile(item.data.author_id)}
-          className="flex items-center gap-2 mb-2"
-        >
-          {/* アイコン */}
-          <div className="w-9 h-9 rounded-full bg-gray-300" />
+        {/* ▼ ヘッダー行：左＝ユーザー、右＝タグ */}
+        <div className="flex items-start justify-between gap-2 mb-2">
+          {/* ユーザー情報（タップでプロフィールへ） */}
+          <button
+            type="button"
+            onClick={() => openProfile(item.data.author_id)}
+            className="flex items-center gap-2"
+          >
+            {/* アイコン */}
+            <div className="w-9 h-9 rounded-full bg-gray-300" />
 
-          {/* 名前 + イグノスID */}
-          <div className="flex flex-col items-start">
-            <span className="text-sm font-bold">{displayName}</span>
-            <span className="text-xs text-gray-500">@{ignosId}</span>
-          </div>
-        </button>
-        {/* ▲ プロフィールへ */}
+            {/* 名前 + イグノスID */}
+            <div className="flex flex-col items-start">
+              <span className="text-sm font-bold">{displayName}</span>
+              <span className="text-xs text-gray-500">@{ignosId}</span>
+            </div>
+          </button>
+
+          {/* タグたち（右側） */}
+          {item.data.hashtags.length > 0 && (
+            <div className="flex flex-wrap justify-end gap-1 max-w-[50%]">
+              {item.data.hashtags.map((t) => (
+                <TagChip
+                  key={t + item.id}
+                  tag={t}
+                  onClick={() => startQuiz(t)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* ▼ 投稿内容：タップで回答開始 */}
         <div
@@ -2062,36 +2075,26 @@ const openEditForFeedItem = (item: FeedItem) => {
           {title}
         </div>
 
-        <div className="flex flex-wrap mb-2">
-          {item.data.hashtags.map((t) => (
-            <TagChip
-              key={t + item.id}
-              tag={t}
-              onClick={() => startQuiz(t)}
-            />
-          ))}
-        </div>
+        {/* メタ情報 */}
         <div className="text-xs text-gray-500">
           {new Date(item.createdAt).toLocaleString()} ・{" "}
           {item.data.type === "choice" ? "選択肢" : "テキスト入力"}
         </div>
-        
-        
-<ActionBar
-  likes={item.likes}
-  retweets={item.retweets}
-  answers={item.answers}
-  onLike={() => incLike(item.id)}
-  onRT={() => incRT(item.id)}
-  onAnswer={handleAnswer}
-  isMine={item.data.author_id === CURRENT_USER_ID}
-  onEdit={
-    item.data.author_id === CURRENT_USER_ID
-      ? () => openEditForFeedItem(item)
-      : undefined
-  }
-/>
 
+        <ActionBar
+          likes={item.likes}
+          retweets={item.retweets}
+          answers={item.answers}
+          onLike={() => incLike(item.id)}
+          onRT={() => incRT(item.id)}
+          onAnswer={handleAnswer}
+          isMine={item.data.author_id === CURRENT_USER_ID}
+          onEdit={
+            item.data.author_id === CURRENT_USER_ID
+              ? () => openEditForFeedItem(item)
+              : undefined
+          }
+        />
       </>
     );
   })()
@@ -2109,6 +2112,13 @@ const openEditForFeedItem = (item: FeedItem) => {
       (first?.author_id === CURRENT_USER_ID && getCurrentUserIgnosId()) ??
       (first?.author_id ? String(first.author_id) : "guest");
 
+    // ★ このまとめ投稿に含まれるタグをすべて集約（重複は削除）
+    const bundleTags = Array.from(
+      new Set(
+        item.data.flatMap((q) => q.hashtags ?? [])
+      )
+    );
+
     // ★ 先頭タグからまとめタイトルを作る（なければ1問目の問題文）
     const mainTag = first?.hashtags?.[0];
     const bundleTitle =
@@ -2125,18 +2135,34 @@ const openEditForFeedItem = (item: FeedItem) => {
 
     return (
       <>
-        {/* ▼ 先頭問題のユーザー行：タップでそのユーザーのプロフィール */}
-        <button
-          type="button"
-          onClick={() => openProfile(first?.author_id)}
-          className="flex items-center gap-2 mb-2"
-        >
-          <div className="w-9 h-9 rounded-full bg-gray-300" />
-          <div className="flex flex-col items-start">
-            <span className="text-sm font-bold">{displayName}</span>
-            <span className="text-xs text-gray-500">@{ignosId}</span>
-          </div>
-        </button>
+        {/* ▼ ヘッダー行：左＝ユーザー、右＝タグ一覧 */}
+        <div className="flex items-start justify-between gap-2 mb-2">
+          {/* 先頭問題のユーザー行：タップでそのユーザーのプロフィール */}
+          <button
+            type="button"
+            onClick={() => openProfile(first?.author_id)}
+            className="flex items-center gap-2"
+          >
+            <div className="w-9 h-9 rounded-full bg-gray-300" />
+            <div className="flex flex-col items-start">
+              <span className="text-sm font-bold">{displayName}</span>
+              <span className="text-xs text-gray-500">@{ignosId}</span>
+            </div>
+          </button>
+
+          {/* 右側にタグ一覧 */}
+          {bundleTags.length > 0 && (
+            <div className="flex flex-wrap justify-end gap-1 max-w-[50%]">
+              {bundleTags.map((t) => (
+                <TagChip
+                  key={t + item.id}
+                  tag={t}
+                  onClick={() => startQuiz(t)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* ▼ タイトル部分：タップで回答開始 */}
         <div
@@ -2159,17 +2185,18 @@ const openEditForFeedItem = (item: FeedItem) => {
           onLike={() => incLike(item.id)}
           onRT={() => incRT(item.id)}
           onAnswer={handleAnswer}
-            isMine={first?.author_id === CURRENT_USER_ID}
-  onEdit={
-    first?.author_id === CURRENT_USER_ID
-      ? () => openEditForFeedItem(item)
-      : undefined
-  }
+          isMine={first?.author_id === CURRENT_USER_ID}
+          onEdit={
+            first?.author_id === CURRENT_USER_ID
+              ? () => openEditForFeedItem(item)
+              : undefined
+          }
         />
       </>
     );
   })()
 ) : (
+
 
   /* share の描画はそのままでOK */
 
