@@ -1644,6 +1644,20 @@ useEffect(() => {
   loadQuizzesAndFeed();
 }, []);
 
+// 一定時間ごとに最新投稿を取得（例：60秒）
+useEffect(() => {
+  if (!CURRENT_USER_ID) return; // 未ログインなら何もしない
+
+  const intervalId = window.setInterval(() => {
+    // ここでは単純に全体を再ロード
+    loadQuizzesAndFeed();
+  }, 30_000); // 30秒ごと
+
+  return () => {
+    window.clearInterval(intervalId);
+  };
+}, []);
+
   useEffect(() => {
     (async () => {
       try {
@@ -2019,11 +2033,15 @@ const openEditForFeedItem = (item: FeedItem) => {
       (item.data.author_id === CURRENT_USER_ID && getCurrentUserIgnosId()) ??
       (item.data.author_id ? String(item.data.author_id) : "guest");
 
+    // タグ関連
+    const tags = item.data.hashtags ?? [];
+    const mainTag = tags[0];
+    const hasMoreTags = tags.length > 1;
+
     // ★ 先頭タグからタイトルを作る（なければ問題文）
-    const mainTag = item.data.hashtags?.[0];
     const title =
       mainTag != null && mainTag !== ""
-        ? `${mainTag}に関する問題`
+        ? `${mainTag}に関する問題` // mainTag は "#英語" 形式なのでそのまま使う
         : item.data.question;
 
     // 回答開始ハンドラ（本文タップ & ボタンで共通）
@@ -2035,7 +2053,7 @@ const openEditForFeedItem = (item: FeedItem) => {
 
     return (
       <>
-        {/* ▼ ヘッダー行：左＝ユーザー、右＝タグ */}
+        {/* ▼ ヘッダー行：左＝ユーザー情報、右＝タグ＋… */}
         <div className="flex items-start justify-between gap-2 mb-2">
           {/* ユーザー情報（タップでプロフィールへ） */}
           <button
@@ -2053,16 +2071,17 @@ const openEditForFeedItem = (item: FeedItem) => {
             </div>
           </button>
 
-          {/* タグたち（右側） */}
-          {item.data.hashtags.length > 0 && (
-            <div className="flex flex-wrap justify-end gap-1 max-w-[50%]">
-              {item.data.hashtags.map((t) => (
-                <TagChip
-                  key={t + item.id}
-                  tag={t}
-                  onClick={() => startQuiz(t)}
-                />
-              ))}
+          {/* タグ（1個＋「…」） */}
+          {mainTag && (
+            <div className="flex items-center justify-end gap-1 max-w-[50%] overflow-hidden whitespace-nowrap">
+              <TagChip
+                key={mainTag + item.id}
+                tag={mainTag}
+                onClick={() => startQuiz(mainTag)}
+              />
+              {hasMoreTags && (
+                <span className="text-xs text-gray-500 align-middle">…</span>
+              )}
             </div>
           )}
         </div>
@@ -2075,7 +2094,7 @@ const openEditForFeedItem = (item: FeedItem) => {
           {title}
         </div>
 
-        {/* メタ情報 */}
+        {/* 日付＋問題タイプ */}
         <div className="text-xs text-gray-500">
           {new Date(item.createdAt).toLocaleString()} ・{" "}
           {item.data.type === "choice" ? "選択肢" : "テキスト入力"}
@@ -2112,21 +2131,21 @@ const openEditForFeedItem = (item: FeedItem) => {
       (first?.author_id === CURRENT_USER_ID && getCurrentUserIgnosId()) ??
       (first?.author_id ? String(first.author_id) : "guest");
 
-    // ★ このまとめ投稿に含まれるタグをすべて集約（重複は削除）
+    // このまとめ投稿に含まれるタグをすべて集約（重複削除）
     const bundleTags = Array.from(
-      new Set(
-        item.data.flatMap((q) => q.hashtags ?? [])
-      )
+      new Set(item.data.flatMap((q) => q.hashtags ?? []))
     );
+    const mainBundleTag = bundleTags[0];
+    const hasMoreBundleTags = bundleTags.length > 1;
 
-    // ★ 先頭タグからまとめタイトルを作る（なければ1問目の問題文）
+    // 先頭タグからまとめタイトルを作る（なければ1問目）
     const mainTag = first?.hashtags?.[0];
     const bundleTitle =
       mainTag != null && mainTag !== ""
         ? `${mainTag}に関する問題`
         : first?.question ?? "クイズ（複数）";
 
-    // ★ 回答開始ハンドラ（タイトル/全◯問/ボタン共通）
+    // 回答開始ハンドラ
     const handleAnswer = () => {
       incAnswer(item.id);
       setAnswerPool(item.data);
@@ -2135,9 +2154,9 @@ const openEditForFeedItem = (item: FeedItem) => {
 
     return (
       <>
-        {/* ▼ ヘッダー行：左＝ユーザー、右＝タグ一覧 */}
+        {/* ▼ ヘッダー行：左＝ユーザー、右＝タグ＋… */}
         <div className="flex items-start justify-between gap-2 mb-2">
-          {/* 先頭問題のユーザー行：タップでそのユーザーのプロフィール */}
+          {/* 先頭問題のユーザー行 */}
           <button
             type="button"
             onClick={() => openProfile(first?.author_id)}
@@ -2150,16 +2169,17 @@ const openEditForFeedItem = (item: FeedItem) => {
             </div>
           </button>
 
-          {/* 右側にタグ一覧 */}
-          {bundleTags.length > 0 && (
-            <div className="flex flex-wrap justify-end gap-1 max-w-[50%]">
-              {bundleTags.map((t) => (
-                <TagChip
-                  key={t + item.id}
-                  tag={t}
-                  onClick={() => startQuiz(t)}
-                />
-              ))}
+          {/* タグ（1個＋「…」） */}
+          {mainBundleTag && (
+            <div className="flex items-center justify-end gap-1 max-w-[50%] overflow-hidden whitespace-nowrap">
+              <TagChip
+                key={mainBundleTag + item.id}
+                tag={mainBundleTag}
+                onClick={() => startQuiz(mainBundleTag)}
+              />
+              {hasMoreBundleTags && (
+                <span className="text-xs text-gray-500 align-middle">…</span>
+              )}
             </div>
           )}
         </div>
@@ -2196,6 +2216,7 @@ const openEditForFeedItem = (item: FeedItem) => {
     );
   })()
 ) : (
+
 
 
   /* share の描画はそのままでOK */
@@ -2449,7 +2470,10 @@ onClick={() => {
       {/* ボトムナビ */}
       <BottomNav
         active={activeTab}
-        onHome={() => setMode("home")}
+          onHome={async () => {
+    setMode("home");
+    await loadQuizzesAndFeed(); // ★ ここで最新の投稿を取得
+  }}
         onSearch={() => setMode("search")}
         onFolders={() => setMode("folders")}
         onNotify={() => setMode("notifications")}
