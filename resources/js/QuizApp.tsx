@@ -74,7 +74,10 @@ import { TagChip } from "./components/ui/TagChip";
 import { ActionBar } from "./components/ui/ActionBar";
 
 import { CURRENT_USER_ID, pickDisplayName, getCurrentUserIgnosId } from "./utils/user";
+import { IS_ADMIN } from "./utils/user";
 console.log("DEBUG Current User ID =", CURRENT_USER_ID);
+console.log("DEBUG accountLevel =", window.Ignos?.accountLevel);
+console.log("DEBUG IS_ADMIN =", IS_ADMIN);
 
 import { ProfileScreen } from "./components/profile/ProfileScreen";
 
@@ -461,15 +464,15 @@ const submitMulti = () => {
           onChange={(nd) =>
             setDrafts((prev) => prev.map((x, i) => (i === activeIdx ? nd : x)))
           }
-onRemove={() => {
-  setDrafts((prev) => {
-    const next = prev.filter((_, i) => i !== activeIdx);
-    const nextIdx = Math.max(0, Math.min(activeIdx, next.length - 1));
-    setActiveIdx(nextIdx);
-    return next.length ? next : [makeEmptyDraft()];
-  });
-}}
-removable={drafts.length > 1}
+          onRemove={() => {
+            setDrafts((prev) => {
+              const next = prev.filter((_, i) => i !== activeIdx);
+              const nextIdx = Math.max(0, Math.min(activeIdx, next.length - 1));
+              setActiveIdx(nextIdx);
+              return next.length ? next : [makeEmptyDraft()];
+            });
+          }}
+          removable={drafts.length > 1}
 
         />
 
@@ -624,6 +627,285 @@ const MultiEditor: React.FC<{
     </div>
   );
 };
+
+// JSON 一括投入用の入力フォーマット
+type BulkInputItem = {
+  question: string;
+  type?: "choice" | "text";        // 省略時は "choice"
+  choices?: string[];              // choice のとき。省略時は自動組み立て
+  correct?: string;                // 正解（必須）
+  wrongs?: string[];               // 不正解の配列（1つ以上推奨）
+  modelAnswer?: string;            // テキスト問題用の模範解答
+  note?: string;                   // 解説・補足
+};
+
+const BulkImportDialog: React.FC<{
+  onClose: () => void;
+  onImported: (posts: QuizPost[]) => void;
+}> = ({ onClose, onImported }) => {
+  const [tagsInput, setTagsInput] = useState("");
+  const [visibility, setVisibility] = useState<Visibility>(3); // デフォルト: グローバル
+  const [jsonText, setJsonText] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<QuizPost[] | null>(null);
+
+  const handlePreview = () => {
+    setError(null);
+    setPreview(null);
+
+    const tags = parseHashtags(tagsInput);
+    if (tags.length === 0) {
+      setError("タグを1つ以上入力してください。");
+      return;
+    }
+
+    let raw: unknown;
+    try {
+      raw = JSON.parse(jsonText);
+    } catch (e) {
+      setError("JSON の形式が不正です。配列形式で貼り付けてください。");
+      return;
+    }
+
+    if (!Array.isArray(raw)) {
+      setError("JSON の最上位は配列である必要があります。");
+      return;
+    }
+
+    if (raw.length === 0) {
+      setError("問題が1件も含まれていません。");
+      return;
+    }
+
+    if (raw.length > 50) {
+      setError(`問題は最大 50 件までです（現在 ${raw.length} 件）。`);
+      return;
+    }
+
+    const now = Date.now();
+    const posts: QuizPost[] = [];
+    for (let i = 0; i < raw.length; i++) {
+      const item = raw[i] as BulkInputItem;
+      const idxLabel = `#${i + 1}番目の問題`;
+
+      if (!item.question || !item.correct) {
+        setError(`${idxLabel} に question または correct がありません。`);
+        return;
+      }
+
+      const type: QuizType = item.type ?? "choice";
+
+      if (type === "choice") {
+        const wrongs = (item.wrongs ?? []).map((w) => String(w).trim()).filter(Boolean);
+        const correct = String(item.correct).trim();
+        if (!correct) {
+          setError(`${idxLabel} の correct が空です。`);
+          return;
+        }
+        if (wrongs.length < 1) {
+          setError(`${idxLabel} の wrongs は 1 件以上必要です。`);
+          return;
+        }
+        const choices = [correct, ...wrongs];
+
+        posts.push({
+          id: uid(),
+          question: String(item.question).trim(),
+          type: "choice",
+          choices,
+          correctIndex: 0,
+          note: item.note?.toString().trim() || undefined,
+          hashtags: tags,
+          createdAt: now + i,
+          author_id: CURRENT_USER_ID,
+          visibility,
+        });
+      } else {
+        const modelAnswer = item.modelAnswer ?? item.correct;
+        if (!modelAnswer) {
+          setError(`${idxLabel} の modelAnswer / correct がありません（テキスト問題）。`);
+          return;
+        }
+        posts.push({
+          id: uid(),
+          question: String(item.question).trim(),
+          type: "text",
+          modelAnswer: String(modelAnswer).trim(),
+          note: item.note?.toString().trim() || undefined,
+          hashtags: tags,
+          createdAt: now + i,
+          author_id: CURRENT_USER_ID,
+          visibility,
+        });
+      }
+    }
+
+    setPreview(posts);
+  };
+
+  const handleImport = () => {
+    if (!preview || preview.length === 0) return;
+    onImported(preview);
+    onClose();
+  };
+
+  return (
+    
+    <div className="flex flex-col h-full max-h-[90vh]">
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-sm font-bold">問題一括登録（JSON）</div>
+        <button
+          onClick={onClose}
+          className="text-xs text-gray-500 px-2 py-1 rounded hover:bg-gray-100"
+        >
+          閉じる
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto space-y-3 text-sm">
+        {/* AI向けプロンプト（コピー用） */}
+<div>
+  <div className="text-xs font-bold mb-1">
+    AI向けプロンプト（コピーして使えます）
+  </div>
+
+  <textarea
+    readOnly
+    value={`あなたは教育用クイズ問題を作成するエキスパートです。
+以下の条件に従い、クイズ問題を JSON 配列形式で作成してください。
+
+【出力形式について】
+- JSON 配列（[]）のみを出力
+- 各要素が 1 問に対応
+- 配列の最上位以外は一切出力しない（説明文・補足禁止）
+- コメントや余計な文字は禁止
+- 50問以内で作成すること
+
+【1問の形式】
+{
+  "question": "問題文",
+  "type": "choice" または "text",
+  "correct": "正解",
+  "wrongs": ["不正解1", "不正解3"],
+  "note": "各選択肢に関する補足・根拠を読んだだけで理解深まる品質で、必要に応じて例文を交えながら丁寧語で解説してください"
+}
+
+【生成してほしい内容】
+（ここに分野を書く）
+
+【最終出力】
+JSON 配列のみを出力`}
+    className="w-full h-40 p-3 border rounded-xl bg-gray-50 text-xs font-mono"
+  />
+</div>
+
+        <div>
+          <div className="text-xs font-bold mb-1">タグ（全問題共通）</div>
+          <input
+            value={tagsInput}
+            onChange={(e) => setTagsInput(e.target.value)}
+            placeholder="#英単語 #歴史 など（空白・カンマ区切り）"
+            className="w-full px-3 py-2 bg-gray-50 rounded-xl border border-gray-200"
+          />
+        </div>
+
+        <div>
+          <div className="text-xs font-bold mb-1">公開範囲（全問題共通）</div>
+          <div className="flex gap-2 text-xs">
+            <button
+              type="button"
+              onClick={() => setVisibility(1)}
+              className={`px-3 py-1 rounded-full border ${
+                visibility === 1
+                  ? "bg-black text-white border-black"
+                  : "bg-gray-50 text-gray-700 border-gray-300"
+              }`}
+            >
+              プライベート
+            </button>
+            <button
+              type="button"
+              onClick={() => setVisibility(2)}
+              className={`px-3 py-1 rounded-full border ${
+                visibility === 2
+                  ? "bg-black text-white border-black"
+                  : "bg-gray-50 text-gray-700 border-gray-300"
+              }`}
+            >
+              フォロワー限定
+            </button>
+            <button
+              type="button"
+              onClick={() => setVisibility(3)}
+              className={`px-3 py-1 rounded-full border ${
+                visibility === 3
+                  ? "bg-black text-white border-black"
+                  : "bg-gray-50 text-gray-700 border-gray-300"
+              }`}
+            >
+              グローバル
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <div className="text-xs font-bold mb-1">問題データ（JSON）</div>
+          <textarea
+            value={jsonText}
+            onChange={(e) => setJsonText(e.target.value)}
+            placeholder={`[
+  {
+    "question": "apple の意味は？",
+    "type": "choice",
+    "correct": "りんご",
+    "wrongs": ["みかん", "ぶどう", "バナナ"],
+    "note": "apple は果物のりんご。"
+  },
+  {
+    "question": "日本の首都は？",
+    "type": "text",
+    "correct": "東京",
+    "note": "東京都。"
+  }
+]`}
+            className="w-full h-48 p-3 border rounded-xl bg-gray-50 border-gray-200 font-mono text-xs"
+          />
+        </div>
+
+        {error && (
+          <div className="text-xs text-red-600 whitespace-pre-wrap">{error}</div>
+        )}
+
+        {preview && (
+          <div className="text-xs text-gray-600">
+            プレビュー件数: {preview.length} 件
+          </div>
+        )}
+      </div>
+
+      <div className="flex gap-2 justify-end mt-3">
+        <button
+          onClick={handlePreview}
+          className="px-4 py-2 rounded-full bg-gray-100 text-sm"
+        >
+          プレビュー
+        </button>
+        <button
+          onClick={handleImport}
+          disabled={!preview || preview.length === 0}
+          className={`px-4 py-2 rounded-full text-sm font-bold ${
+            preview && preview.length > 0
+              ? "bg-black text-white"
+              : "bg-gray-200 text-gray-400"
+          }`}
+        >
+          この内容で登録
+        </button>
+      </div>
+    </div>
+  );
+};
+
 
 /* =========================
    フォルダ（タグ）一覧
@@ -1323,7 +1605,7 @@ const QuizRunner: React.FC<{
   if (!q && stage !== "finished") {
     return (
       <Card>
-        <SectionTitle title={`${tag} のクイズ`} />
+        <SectionTitle title={`${tag} の問題`} />
         <div className="px-4 pb-4 text-gray-500">
           問題が足りません。まずは投稿してみましょう。
         </div>
@@ -1364,7 +1646,7 @@ const QuizRunner: React.FC<{
   return (
     <Card>
       <SectionTitle
-        title={`${tag} のクイズ（${current + 1} / ${questions.length}）`}
+        title={`${tag} の問題（${current + 1} / ${questions.length}）`}
       />
       <div className="px-4 pb-4">
         <div className="text-base leading-relaxed mb-4 whitespace-pre-wrap">
@@ -1539,6 +1821,7 @@ const [categorySmalls, setCategorySmalls] = useState<CategorySmall[]>([]);
 
 const [isSidebarOpen, setSidebarOpen] = useState(false);
 const [isToolsOpen, setToolsOpen] = useState(false);
+const [bulkImportOpen, setBulkImportOpen] = useState(false);
 // QuizApp コンポーネント内
 
 const loadQuizzesAndFeed = async () => {
@@ -1896,6 +2179,29 @@ const toggleFollow = async (targetId: number) => {
     postFeed(toFeedRow(item as any)).catch(() => {});
   };
 
+  const handleBulkImported = (newPosts: QuizPost[]) => {
+  if (!newPosts.length) return;
+
+  // 1) posts に追加
+  setPosts((prev) => [...newPosts, ...prev]);
+
+  // 2) feed にも追加（単発投稿として扱う）
+  const newFeedItems: FeedItem[] = newPosts.map((p) => ({
+    id: p.id,
+    kind: "quiz",
+    data: p,
+    createdAt: p.createdAt,
+    likes: 0,
+    retweets: 0,
+    answers: 0,
+  }));
+  setFeed((prev) => [...newFeedItems, ...prev]);
+
+  // 3) DB に保存
+  bulkUpsertQuizzes(newPosts.map(toQuizRow)).catch(() => {});
+};
+
+
 const visibleFeed = useMemo(() => {
   // /api/quizzes が viewer_id に応じて
   // 「自分の全投稿＋フォロー中ユーザーの visibility != 1 の投稿」
@@ -1907,7 +2213,7 @@ const visibleFeed = useMemo(() => {
   // 共有フロー
   const openShare = (tag: string) => {
     setShareTag(tag);
-    setShareMessage(`${tag}のクイズを公開したよ！`);
+    setShareMessage(`${tag}の問題を公開しました！`);
     setShareOpen(true);
   };
   const confirmShare = () => {
@@ -1915,7 +2221,7 @@ const visibleFeed = useMemo(() => {
       id: uid(),
       kind: "share",
       tag: shareTag,
-      message: `${shareMessage} （クイズリンク）`,
+      message: `${shareMessage} （リンク）`,
       createdAt: Date.now(),
       likes: 0,
       retweets: 0,
@@ -2383,6 +2689,13 @@ const openEditForFeedItem = (item: FeedItem) => {
   />
 </Modal>
 
+{/* JSON 一括投入モーダル（admin専用） */}
+<Modal open={bulkImportOpen} onClose={() => setBulkImportOpen(false)}>
+  <BulkImportDialog
+    onClose={() => setBulkImportOpen(false)}
+    onImported={handleBulkImported}
+  />
+</Modal>
 
 
       {/* 共有メッセージ編集モーダル */}
@@ -2556,7 +2869,18 @@ onClick={() => {
         <button className="w-full text-left px-2 py-1 rounded hover:bg-gray-100">
           ランダム出題（仮）
         </button>
-        {/* ・・・今後の機能をここに */}
+        {/* ★ admin 限定：JSON 一括投入 */}
+        {IS_ADMIN && (
+          <button
+            className="w-full text-left px-2 py-1 rounded hover:bg-gray-100 text-red-600"
+            onClick={() => {
+              setToolsOpen(false);
+              setBulkImportOpen(true);
+            }}
+          >
+            問題一括登録（JSON）
+          </button>
+        )}
       </div>
     </div>
   </div>

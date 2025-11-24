@@ -7,12 +7,17 @@ declare global {
       userId: number;
       name?: string;
       ignosId?: string;
+      accountLevel?: number;
     };
   }
 }
 
 // ログイン中ユーザーID（未ログインは 0 扱い）
 export const CURRENT_USER_ID = window.Ignos?.userId ?? 0;
+// アカウントレベル（1:管理者, 2:通常, 3:学割）
+export const ACCOUNT_LEVEL: number = window.Ignos?.accountLevel ?? 2;
+// 管理者フラグ
+export const IS_ADMIN: boolean = ACCOUNT_LEVEL === 1;
 
 // // 表示用ユーザー名（簡易版）
 // // 本番では API から取得したユーザー情報に差し替え予定

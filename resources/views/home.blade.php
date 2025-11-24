@@ -13,7 +13,7 @@
     <link rel="manifest" href="{{ asset('manifest.webmanifest') }}">
 
     <meta name="theme-color" content="#ffffffff">
-    @vite('resources/js/main.tsx')
+    <!-- @vite('resources/js/main.tsx') -->
     <meta name="viewport" content="width=device-width, initial-scale=1">
 </head>
 <body class="antialiased">
@@ -24,6 +24,7 @@
     userId: {{ session('uid') }},
     name: @json(session('name')),
     ignosId: @json(optional($user)->ignos_id),
+    accountLevel: {{ session('account_level') ?? 2 }},
   };
 </script>
     {{-- Vite (React) のバンドルを読み込む --}}

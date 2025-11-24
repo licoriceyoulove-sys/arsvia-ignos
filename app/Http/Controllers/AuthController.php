@@ -50,6 +50,7 @@ class AuthController extends Controller
         // セッションにユーザー情報を保存
         $request->session()->put('uid', $user->id);
         $request->session()->put('name', $user->name ?? '');
+        $request->session()->put('account_level', $user->account_level ?? 2);
 
         // セッションID再発行（セキュリティ対策）
         $request->session()->regenerate();
