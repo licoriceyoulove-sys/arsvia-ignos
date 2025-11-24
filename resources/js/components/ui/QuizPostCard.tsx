@@ -95,7 +95,7 @@ export const QuizPostCard: React.FC<QuizPostCardProps> = ({
   };
 
   return (
-    <div className="py-1 border-b last:border-b-0">
+    <div className="py-1 border-b border-gray-200 last:border-b-0">
       {/* ▼ ヘッダー行：左＝ユーザー情報、右＝タグ＋… */}
       <div className="flex items-start justify-between gap-2 mb-2">
         <button

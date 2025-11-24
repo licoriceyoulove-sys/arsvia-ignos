@@ -99,7 +99,7 @@ if (activeTab === "posts") {
   body = (
     <div>
       {myPosts.length === 0 && (
-        <div className="px-4 py-6 text-sm text-gray-500">
+        <div className="px-4 py-6 text-sm divide-gray-200">
           まだ投稿がありません。クイズを投稿してみましょう。
         </div>
       )}
@@ -127,19 +127,19 @@ if (activeTab === "posts") {
   );
   } else if (activeTab === "revenge") {
     body = (
-      <div className="px-4 py-6 text-sm text-gray-500">
+      <div className="px-4 py-6 text-sm divide-gray-200">
         リベンジリストはまだありません。（実装予定）
       </div>
     );
   } else if (activeTab === "thanks") {
     body = (
-      <div className="px-4 py-6 text-sm text-gray-500">
+      <div className="px-4 py-6 text-sm divide-gray-200">
         Thanks リストはまだありません。（実装予定）
       </div>
     );
   } else {
     body = (
-      <div className="px-4 py-6 text-sm text-gray-500">
+      <div className="px-4 py-6 text-sm divide-gray-200">
         ブックマークした投稿はまだありません。（実装予定）
       </div>
     );

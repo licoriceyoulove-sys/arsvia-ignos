@@ -1289,7 +1289,9 @@ const AnswerRunner: React.FC<{
   posts: QuizPost[]; // その投稿に含まれる問題（1件～最大10件）
   title?: string;
   onBack: () => void;
-}> = ({ posts, title = "この投稿に回答", onBack }) => {
+  followIds: number[];                          // フォロー中ユーザーID一覧
+  onToggleFollow: (targetUserId: number) => void; // フォロー/解除をトグル
+}> = ({ posts, title = "この投稿に回答", onBack, followIds, onToggleFollow }) => {
   // 出題用に choice のみ選択肢をシャッフル
   const prepared = useMemo<PreparedQuestion[]>(() => {
     return posts.slice(0, 10).map((post, i) => {
@@ -1318,6 +1320,23 @@ const AnswerRunner: React.FC<{
   const pq = prepared[current];
   const q = pq?.post;
 
+    const firstPost = posts[0];
+  const authorId = firstPost?.author_id ?? null;
+  const isMyPost = authorId === CURRENT_USER_ID;
+
+    const displayName = pickDisplayName(
+    firstPost?.authorDisplayName,
+    authorId ?? undefined
+  );
+
+    const ignosId =
+    firstPost?.authorIgnosId ??
+    (authorId === CURRENT_USER_ID && getCurrentUserIgnosId()) ??
+    (authorId ? String(authorId) : "guest");
+
+  const isFollowing =
+    typeof authorId === "number" && followIds.includes(authorId);
+    
   const canOK = useMemo(() => {
     if (!q) return false;
     return q.type === "choice" ? selected !== null : typed.trim().length > 0;
@@ -1539,7 +1558,9 @@ const QuizRunner: React.FC<{
   tag: string;
   posts: QuizPost[];
   onBack: () => void;
-}> = ({ tag, posts, onBack }) => {
+    followIds: number[];
+  onToggleFollow: (targetUserId: number) => void;
+}> = ({ tag, posts, onBack, followIds, onToggleFollow }) => {
   const pool = useMemo(
     () => posts.filter((p) => p.hashtags.includes(tag)),
     [posts, tag]
@@ -1566,6 +1587,23 @@ const QuizRunner: React.FC<{
 
   const pq = questions[current];
   const q = pq?.post;
+
+    const authorId =
+    typeof q?.author_id === "number" ? (q.author_id as number) : null;
+  const isMyPost = authorId === CURRENT_USER_ID;
+
+  const displayName = pickDisplayName(
+    q?.authorDisplayName,
+    authorId ?? undefined
+  );
+
+  const ignosId =
+    q?.authorIgnosId ??
+    (authorId === CURRENT_USER_ID && getCurrentUserIgnosId()) ??
+    (authorId ? String(authorId) : "guest");
+
+  const isFollowing =
+    typeof authorId === "number" && followIds.includes(authorId);
 
   const canOK = useMemo(() => {
     if (!q) return false;
@@ -1778,6 +1816,40 @@ const QuizRunner: React.FC<{
             >
               次へ
             </button>
+
+            
+
+            {/* ▼ 出題者情報＋フォローボタン（追加部分） */}
+            {authorId && (
+              <div className="mt-4 pt-3 border-t border-gray-200 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {/* アイコン（仮） */}
+                  <div className="w-9 h-9 rounded-full bg-gray-300" />
+                  <div className="flex flex-col">
+                    <span className="text-sm font-bold">{displayName}</span>
+                    <span className="text-xs text-gray-500">@{ignosId}</span>
+                  </div>
+                </div>
+
+                {/* 自分自身の問題ならフォローボタンは出さない */}
+                {!isMyPost && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      typeof authorId === "number" &&
+                      onToggleFollow(authorId)
+                    }
+                    className={`px-3 py-1 rounded-full text-xs font-bold ${
+                      isFollowing
+                        ? "bg-gray-100 text-gray-800 border"
+                        : "bg-black text-white"
+                    }`}
+                  >
+                    {isFollowing ? "フォロー解除" : "フォローする"}
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -2087,7 +2159,7 @@ const toggleFollow = async (targetId: number) => {
     }
 
     // ★ フォロー状態が変わったので、ホーム用のクイズ/フィードを再取得
-    await loadQuizzesAndFeed();
+    // await loadQuizzesAndFeed();
 
   } catch (e) {
     console.error("toggleFollow failed", e);
@@ -2099,7 +2171,6 @@ const toggleFollow = async (targetId: number) => {
 
   const backToFolders = () => setMode("folders");
 
-    // 追加：単発投稿の編集結果を適用
   // 追加：単発/まとめ投稿の編集結果を適用（追加・更新・削除を反映）
   const applyEditBundle = ({
     posts: updatedPosts,
@@ -2321,7 +2392,7 @@ const openEditForFeedItem = (item: FeedItem) => {
                 </div>
               )}
               {visibleFeed.map((item) => (
-                <div key={item.id} className="py-1 border-b last:border-b-0">
+                <div key={item.id} className="py-1 border-b border-gray-200 last:border-b-0">
                   {item.kind === "quiz" ? (
   <QuizPostCard
     post={item.data}
@@ -2499,19 +2570,28 @@ const openEditForFeedItem = (item: FeedItem) => {
         )}
 
         {/* QUIZ */}
-        {mode === "quiz" && selectedTag && (
-          <QuizRunner tag={selectedTag} posts={posts} onBack={backToFolders} />
-        )}
+{mode === "quiz" && selectedTag && (
+  <QuizRunner
+    tag={selectedTag}
+    posts={posts}
+    onBack={backToFolders}
+    followIds={followIds}
+    onToggleFollow={toggleFollow}
+  />
+)}
 
-        {mode === "answer" && answerPool && (
-          <AnswerRunner
-            posts={answerPool}
-            onBack={() => {
-              setAnswerPool(null);
-              setMode("home");
-            }}
-          />
-        )}
+{mode === "answer" && answerPool && (
+  <AnswerRunner
+    posts={answerPool}
+    onBack={() => {
+      setAnswerPool(null);
+      setMode("home");
+    }}
+    followIds={followIds}
+    onToggleFollow={toggleFollow}
+  />
+)}
+
 
 {/* SEARCH：ユーザー検索 */}
 {mode === "search" && (
