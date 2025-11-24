@@ -20,7 +20,7 @@ export type QuizPost = {
     visibility: Visibility;
 
     category_tag?: string | null;
-    
+
     authorDisplayName?: string;
     authorIgnosId?: string | null;
 
@@ -47,6 +47,7 @@ export type SharePost = {
     createdAt: number;
     likes: number;
     retweets: number;
+    isMarked?: boolean;
 };
 
 export type FeedQuizItem = {
@@ -57,6 +58,7 @@ export type FeedQuizItem = {
     likes: number;
     retweets: number;
     answers: number;
+    isMarked?: boolean;
 };
 
 export type FeedQuizBundleItem = {
@@ -67,6 +69,7 @@ export type FeedQuizBundleItem = {
     likes: number;
     retweets: number;
     answers: number;
+    isMarked?: boolean;
 };
 
 export type FeedItem = FeedQuizItem | FeedQuizBundleItem | SharePost;

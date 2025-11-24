@@ -2289,6 +2289,15 @@ const openEditForFeedItem = (item: FeedItem) => {
     patchFeed(id, "answers").catch(() => {}); // ← 変更
   };
 
+  const toggleMark = (feedId: string) => {
+  setFeed((prev) =>
+    prev.map((item) =>
+      item.id === feedId
+        ? { ...item, isMarked: !item.isMarked }
+        : item
+    )
+  );
+};
   const activeTab = mode;
 
   return (
@@ -2399,6 +2408,8 @@ const openEditForFeedItem = (item: FeedItem) => {
           onLike={() => incLike(item.id)}
           onRT={() => incRT(item.id)}
           onAnswer={handleAnswer}
+  isMarked={item.isMarked ?? false}
+  onToggleMark={() => toggleMark(item.id)}
           isMine={item.data.author_id === CURRENT_USER_ID}
           onEdit={
             item.data.author_id === CURRENT_USER_ID
@@ -2498,6 +2509,9 @@ const openEditForFeedItem = (item: FeedItem) => {
           onLike={() => incLike(item.id)}
           onRT={() => incRT(item.id)}
           onAnswer={handleAnswer}
+            isMarked={item.isMarked ?? false}
+  onToggleMark={() => toggleMark(item.id)}
+
           isMine={first?.author_id === CURRENT_USER_ID}
           onEdit={
             first?.author_id === CURRENT_USER_ID
