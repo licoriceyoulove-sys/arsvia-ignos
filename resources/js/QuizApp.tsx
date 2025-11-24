@@ -125,6 +125,15 @@ const seedsToPosts = (seeds: QuizSeed[]): QuizPost[] => {
   }));
 };
 
+// 日付フォーマット用ユーティリティ
+const formatDateYMD = (ts: number) => {
+  const d = new Date(ts);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}/${m}/${day}`;
+};
+
 /* =========================
    カテゴリJSON自動読み込み
 ========================= */
@@ -2302,7 +2311,7 @@ const openEditForFeedItem = (item: FeedItem) => {
                 </div>
               )}
               {visibleFeed.map((item) => (
-                <div key={item.id} className="py-3 border-b last:border-b-0">
+                <div key={item.id} className="py-1 border-b last:border-b-0">
                   {item.kind === "quiz" ? (
   (() => {
     // 表示名とイグノスIDを決定
@@ -2378,10 +2387,10 @@ const openEditForFeedItem = (item: FeedItem) => {
         </div>
 
         {/* 日付＋問題タイプ */}
-        <div className="text-xs text-gray-500">
+        {/* <div className="text-xs text-gray-500">
           {new Date(item.createdAt).toLocaleString()} ・{" "}
           {item.data.type === "choice" ? "選択肢" : "テキスト入力"}
-        </div>
+        </div> */}
 
         <ActionBar
           likes={item.likes}
@@ -2396,6 +2405,7 @@ const openEditForFeedItem = (item: FeedItem) => {
               ? () => openEditForFeedItem(item)
               : undefined
           }
+        createdAtText={formatDateYMD(item.createdAt)}
         />
       </>
     );
@@ -2494,6 +2504,7 @@ const openEditForFeedItem = (item: FeedItem) => {
               ? () => openEditForFeedItem(item)
               : undefined
           }
+        createdAtText={formatDateYMD(item.createdAt)}
         />
       </>
     );
@@ -2739,7 +2750,7 @@ onClick={() => {
           className="
             fixed
             bottom-20 right-4
-            z-40
+            z-20
             w-14 h-14
             rounded-full
             bg-black
