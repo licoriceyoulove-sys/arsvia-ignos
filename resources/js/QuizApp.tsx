@@ -80,6 +80,7 @@ console.log("DEBUG accountLevel =", window.Ignos?.accountLevel);
 console.log("DEBUG IS_ADMIN =", IS_ADMIN);
 
 import { ProfileScreen } from "./components/profile/ProfileScreen";
+import { QuizPostCard } from "./components/ui/QuizPostCard";
 
   // ★ フォロー中ユーザーID一覧
   
@@ -2322,105 +2323,31 @@ const openEditForFeedItem = (item: FeedItem) => {
               {visibleFeed.map((item) => (
                 <div key={item.id} className="py-1 border-b last:border-b-0">
                   {item.kind === "quiz" ? (
-  (() => {
-    // 表示名とイグノスIDを決定
-    const displayName = pickDisplayName(
-      item.data.authorDisplayName,
-      item.data.author_id
-    );
-
-    const ignosId =
-      item.data.authorIgnosId ??
-      (item.data.author_id === CURRENT_USER_ID && getCurrentUserIgnosId()) ??
-      (item.data.author_id ? String(item.data.author_id) : "guest");
-
-    // タグ関連
-    const tags = item.data.hashtags ?? [];
-    const mainTag = tags[0];
-    const hasMoreTags = tags.length > 1;
-
-    // ★ 先頭タグからタイトルを作る（なければ問題文）
-    const title =
-      mainTag != null && mainTag !== ""
-        ? `${mainTag}に関する問題` // mainTag は "#英語" 形式なのでそのまま使う
-        : item.data.question;
-
-    // 回答開始ハンドラ（本文タップ & ボタンで共通）
-    const handleAnswer = () => {
+  <QuizPostCard
+    post={item.data}
+    feedId={item.id}
+    likes={item.likes}
+    retweets={item.retweets}
+    answers={item.answers}
+    isMarked={(item as any).isMarked ?? false}
+    createdAtOverride={item.createdAt}
+    onAnswer={() => {
       incAnswer(item.id);
       setAnswerPool([item.data]);
       setMode("answer");
-    };
-
-    return (
-      <>
-        {/* ▼ ヘッダー行：左＝ユーザー情報、右＝タグ＋… */}
-        <div className="flex items-start justify-between gap-2 mb-2">
-          {/* ユーザー情報（タップでプロフィールへ） */}
-          <button
-            type="button"
-            onClick={() => openProfile(item.data.author_id)}
-            className="flex items-center gap-2"
-          >
-            {/* アイコン */}
-            <div className="w-9 h-9 rounded-full bg-gray-300" />
-
-            {/* 名前 + イグノスID */}
-            <div className="flex flex-col items-start">
-              <span className="text-sm font-bold">{displayName}</span>
-              <span className="text-xs text-gray-500">@{ignosId}</span>
-            </div>
-          </button>
-
-          {/* タグ（1個＋「…」） */}
-          {mainTag && (
-            <div className="flex items-center justify-end gap-1 max-w-[50%] overflow-hidden whitespace-nowrap">
-              <TagChip
-                key={mainTag + item.id}
-                tag={mainTag}
-                onClick={() => startQuiz(mainTag)}
-              />
-              {hasMoreTags && (
-                <span className="text-xs text-gray-500 align-middle">…</span>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* ▼ 投稿内容：タップで回答開始 */}
-        <div
-          className="text-[15px] whitespace-pre-wrap mb-2 cursor-pointer"
-          onClick={handleAnswer}
-        >
-          {title}
-        </div>
-
-        {/* 日付＋問題タイプ */}
-        {/* <div className="text-xs text-gray-500">
-          {new Date(item.createdAt).toLocaleString()} ・{" "}
-          {item.data.type === "choice" ? "選択肢" : "テキスト入力"}
-        </div> */}
-
-        <ActionBar
-          likes={item.likes}
-          retweets={item.retweets}
-          answers={item.answers}
-          onLike={() => incLike(item.id)}
-          onRT={() => incRT(item.id)}
-          onAnswer={handleAnswer}
-  isMarked={item.isMarked ?? false}
-  onToggleMark={() => toggleMark(item.id)}
-          isMine={item.data.author_id === CURRENT_USER_ID}
-          onEdit={
-            item.data.author_id === CURRENT_USER_ID
-              ? () => openEditForFeedItem(item)
-              : undefined
-          }
-        createdAtText={formatDateYMD(item.createdAt)}
-        />
-      </>
-    );
-  })()
+    }}
+    onLike={() => incLike(item.id)}
+    onRT={() => incRT(item.id)}
+    onToggleMark={() => toggleMark(item.id)}
+    isMine={item.data.author_id === CURRENT_USER_ID}
+    onEdit={
+      item.data.author_id === CURRENT_USER_ID
+        ? () => openEditForFeedItem(item)
+        : undefined
+    }
+    onOpenProfile={(authorId) => openProfile(authorId as number)}
+    onTagClick={(tag) => startQuiz(tag)}
+  />
 ) : item.kind === "quizBundle" ? (
   (() => {
     const first = item.data[0];
@@ -2691,6 +2618,10 @@ const openEditForFeedItem = (item: FeedItem) => {
   followerCount={profileFollowerCount}
   onToggleFollow={() => toggleFollow(profileUserId)}
   onBack={() => setMode("home")}
+  onStartAnswer={(posts) => {
+          setAnswerPool(posts);
+          setMode("answer");
+        }}
 />
 
 

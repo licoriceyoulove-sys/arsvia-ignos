@@ -5,8 +5,10 @@ import { TagChip } from "../ui/TagChip";
 import {
   CURRENT_USER_ID,
   pickDisplayName,
-  getCurrentUserIgnosId 
+  getCurrentUserIgnosId,
 } from "../../utils/user";
+import { ActionBar } from "../ui/ActionBar";
+import { QuizPostCard } from "../ui/QuizPostCard";
 
 type ProfileTab = "posts" | "revenge" | "thanks" | "bookmarks";
 
@@ -18,6 +20,18 @@ export type ProfileScreenProps = {
   followerCount: number;
   onToggleFollow: () => void;
   onBack: () => void;
+
+  // ★ 追加：プロフィールから AnswerRunner を開くため
+  onStartAnswer: (posts: QuizPost[]) => void;
+};
+
+// 日付表示（ホームと同じ YYYY/MM/DD 形式）
+const formatDateYMD = (ts: number) => {
+  const d = new Date(ts);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}/${m}/${day}`;
 };
 
 export const ProfileScreen: React.FC<ProfileScreenProps> = ({
@@ -28,35 +42,40 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   followerCount,
   onToggleFollow,
   onBack,
+  onStartAnswer,
 }) => {
   const [activeTab, setActiveTab] = useState<ProfileTab>("posts");
   const [menuOpen, setMenuOpen] = useState(false);
+const [markedIds, setMarkedIds] = useState<string[]>([]);
+const toggleLocalMark = (id: string) => {
+  setMarkedIds((prev) =>
+    prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+  );
+};
 
   const isMe = userId === CURRENT_USER_ID;
 
-  // 自分の投稿のみ
+  // このユーザーの投稿のみ
   const myPosts = useMemo(
     () => posts.filter((p) => p.author_id === userId),
     [posts, userId]
   );
 
   // 何か1件取れればそこから表示名・IGNOS_ID を使う
-const firstPost = myPosts[0];
+  const firstPost = myPosts[0];
 
-const displayName = pickDisplayName(
-  posts.find((p) => p.author_id === userId)?.authorDisplayName,
-  userId
-);
+  const displayName = pickDisplayName(
+    posts.find((p) => p.author_id === userId)?.authorDisplayName,
+    userId
+  );
 
-const ignosId =
-  firstPost?.authorIgnosId ??
-  (isMe && getCurrentUserIgnosId()
-    ? getCurrentUserIgnosId()!
-    : userId
+  const ignosId =
+    firstPost?.authorIgnosId ??
+    (isMe && getCurrentUserIgnosId()
+      ? getCurrentUserIgnosId()!
+      : userId
       ? String(userId)
       : "guest");
-
-  // const screenName = getUserScreenName(userId);
 
   const postCount = myPosts.length;
 
@@ -74,36 +93,38 @@ const ignosId =
     </button>
   );
 
-  const renderPostList = (list: QuizPost[], emptyLabel: string) => (
+  let body: React.ReactNode;
+
+if (activeTab === "posts") {
+  body = (
     <div>
-      {list.length === 0 && (
-        <div className="px-4 py-6 text-sm text-gray-500">{emptyLabel}</div>
+      {myPosts.length === 0 && (
+        <div className="px-4 py-6 text-sm text-gray-500">
+          まだ投稿がありません。クイズを投稿してみましょう。
+        </div>
       )}
-      {list.map((p) => (
-        <div key={p.id} className="px-4 py-3 border-b last:border-b-0">
-          <div className="text-[15px] whitespace-pre-wrap mb-2">
-            {p.question}
-          </div>
-          <div className="flex flex-wrap mb-2">
-            {p.hashtags.map((t) => (
-              <TagChip key={t + p.id} tag={t} />
-            ))}
-          </div>
-          <div className="text-xs text-gray-500">
-            {new Date(p.createdAt).toLocaleString()} ・{" "}
-            {p.type === "choice" ? "選択肢" : "テキスト入力"}
-          </div>
+
+      {myPosts.map((p) => (
+        <div key={p.id} className="px-4">
+          <QuizPostCard
+            post={p}
+            likes={0}
+            retweets={0}
+            answers={0}
+            isMarked={markedIds.includes(p.id)}
+            onAnswer={() => onStartAnswer([p])}
+            onToggleMark={() => toggleLocalMark(p.id)}
+            // プロフィール画面なので編集や Like/RT はとりあえず無し
+            onLike={() => {}}
+            onRT={() => {}}
+            isMine={userId === CURRENT_USER_ID}
+            onOpenProfile={() => {}}
+            onTagClick={() => {}}
+          />
         </div>
       ))}
     </div>
   );
-
-  let body: React.ReactNode;
-  if (activeTab === "posts") {
-    body = renderPostList(
-      myPosts,
-      "まだ投稿がありません。クイズを投稿してみましょう。"
-    );
   } else if (activeTab === "revenge") {
     body = (
       <div className="px-4 py-6 text-sm text-gray-500">
@@ -180,7 +201,6 @@ const ignosId =
               </div>
             )}
           </div>
-
         </div>
       </div>
 
@@ -207,10 +227,10 @@ const ignosId =
 
       {/* タブ */}
       <div className="px-4 border-b border-gray-200 flex gap-3">
-        {renderTabButton("posts", "投稿")}
-        {renderTabButton("revenge", "リベンジ")}
+        {renderTabButton("posts", "Posts")}
+        {renderTabButton("revenge", "Revenge")}
         {renderTabButton("thanks", "Thanks")}
-        {renderTabButton("bookmarks", "ブックマーク")}
+        {renderTabButton("bookmarks", "Mark")}
       </div>
 
       {/* タブの中身 */}
