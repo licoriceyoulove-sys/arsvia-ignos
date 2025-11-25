@@ -8,7 +8,7 @@ type CardProps = {
 
 export const Card: React.FC<CardProps> = ({ children, className }) => (
   <div
-    className={`w-full bg-white border-b border-gray-200 ${className ?? ""}`}
+    className={`w-full bg-[#FAF9F6] border-b border-gray-200 ${className ?? ""}`}
   >
     {children}
   </div>

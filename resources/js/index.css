@@ -1,2 +1,8 @@
 /* src/index.css */
 @import "tailwindcss";
+
+@layer base {
+  .font-handwriting {
+    font-family: "Comic Sans MS", "Comic Sans", sans-serif;
+  }
+}

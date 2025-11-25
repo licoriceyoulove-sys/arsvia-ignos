@@ -34,26 +34,26 @@ export const ActionBar: React.FC<ActionBarProps> = ({
   const [menuOpen, setMenuOpen] = useState(false);
 
 return (
-    <div className="flex items-center justify-between pt-2 text-sm text-gray-600">
+    <div className="flex items-center justify-between pt-2 text-[10px] text-gray-600">
       {/* 左側：Answer → Thanks → Look → Mark */}
       <div className="flex items-center gap-4 sm:gap-6">
         {/* Answer */}
         {onAnswer && (
-          <button onClick={onAnswer} className="flex items-center gap-1">
-            🅰
+          <button onClick={onAnswer} className="flex items-center gap-1 font-handwriting border border-gray-400 px-1 py-1 rounded-lg">
+            Answer
             <span>{typeof answers === "number" ? answers : ""}</span>
           </button>
         )}
 
         {/* Thanks（いいね） */}
-        <button onClick={onLike} className="flex items-center gap-1">
-          ⭐
+        <button onClick={onLike} className="flex items-center gap-1 font-handwriting border border-gray-400 px-1 py-1 rounded-lg">
+          Thanks
           <span>{likes}</span>
         </button>
 
         {/* Look（リツイート） */}
-        <button onClick={onRT} className="flex items-center gap-1">
-          🔁
+        <button onClick={onRT} className="flex items-center gap-1 font-handwriting border border-gray-400 px-1 py-1 rounded-lg">
+          Look
           <span>{retweets}</span>
         </button>
 
@@ -61,11 +61,11 @@ return (
         {onToggleMark && (
           <button
             onClick={onToggleMark}
-            className="flex items-center gap-1"
+            className="flex items-center gap-1 font-handwriting border border-gray-400 px-1 py-1 rounded-lg"
             aria-label="ブックマーク"
           >
             <span className={isMarked ? "text-black" : "text-gray-400"}>
-              🔖
+              Mark
             </span>
           </button>
         )}

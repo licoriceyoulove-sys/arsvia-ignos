@@ -9,6 +9,7 @@ type Props = {
   onHome: () => void;
   onSearch: () => void;
   onFolders: () => void;
+  onDiscussions: () => void;
   onNotify: () => void;
   onProfile: () => void;
 };
@@ -18,14 +19,16 @@ export const BottomNav: React.FC<Props> = ({
   onHome,
   onSearch,
   onFolders,
+  onDiscussions,
   onNotify,
   onProfile,
 }) => (
   <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-30">
-    <div className="max-w-md mx-auto grid grid-cols-5 text-xs">
+    {/* <div className="max-w-md mx-auto grid grid-cols-5 text-xs"> */}
+      <div className="max-w-md mx-auto flex text-xs">
       <button
         onClick={onHome}
-        className={`py-3 flex flex-col items-center ${
+        className={`flex-1 py-3 flex flex-col items-center ${
           active === "home" ? "text-black" : "text-gray-500"
         }`}
         aria-label="ホーム"
@@ -41,7 +44,7 @@ export const BottomNav: React.FC<Props> = ({
 
       <button
         onClick={onSearch}
-        className={`py-3 flex flex-col items-center ${
+        className={`flex-1 py-3 flex flex-col items-center ${
           active === "search" ? "text-black" : "text-gray-500"
         }`}
         aria-label="検索"
@@ -57,7 +60,7 @@ export const BottomNav: React.FC<Props> = ({
 
       <button
         onClick={onFolders}
-        className={`py-3 flex flex-col items-center ${
+        className={`flex-1 py-3 flex flex-col items-center ${
           active === "folders" ? "text-black" : "text-gray-500"
         }`}
         aria-label="クイズ"
@@ -71,9 +74,26 @@ export const BottomNav: React.FC<Props> = ({
         />
       </button>
 
+<button
+  onClick={onDiscussions}
+  className={`flex-1 py-3 flex flex-col items-center ${
+    active === "discussions" ? "text-black" : "text-gray-500"
+  }`}
+  aria-label="議論"
+>
+  <img
+    src={iconUrl("discussion")} // ★ カスタムアイコンを置く想定
+    alt="議論"
+    className={`w-6 h-6 mb-1 ${
+      active === "discussions" ? "opacity-100" : "opacity-60"
+    }`}
+  />
+</button>
+
+
       <button
         onClick={onNotify}
-        className={`py-3 flex flex-col items-center ${
+        className={`flex-1 py-3 flex flex-col items-center ${
           active === "notifications" ? "text-black" : "text-gray-500"
         }`}
         aria-label="通知"
@@ -90,7 +110,7 @@ export const BottomNav: React.FC<Props> = ({
       {/* プロフィールアイコン */}
       <button
         onClick={onProfile}
-        className={`py-3 flex flex-col items-center ${
+        className={`flex-1 py-3 flex flex-col items-center ${
           active === "profile" ? "text-black" : "text-gray-500"
         }`}
         aria-label="プロフィール"

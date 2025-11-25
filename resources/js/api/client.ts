@@ -234,3 +234,12 @@ export async function getCategorySmalls(): Promise<CategorySmall[]> {
   });
   return res.data as CategorySmall[];
 }
+
+// 全ユーザーの visibility=3（グローバル）クイズを取得
+export const getGlobalQuizzes = async (): Promise<QuizRowFromApi[]> => {
+  const res = await axios.get<QuizRowFromApi[]>(
+    `${API_BASE}/quizzes/global`,
+    { withCredentials: true }
+  );
+  return res.data;
+};

@@ -214,6 +214,47 @@ Route::get('/users/{id}/quizzes', function (int $id) {
 
     return response()->json($rows);
 });
+
+// タグ検索用
+Route::get('/quizzes/global', function (Request $request) {
+    // visibility = 3（グローバル）のみ
+    $rows = DB::table('quizzes as q')
+        ->leftJoin('users as u', 'u.id', '=', 'q.author_id')
+        ->select([
+            'q.id',
+            'q.question',
+            'q.type',
+            'q.choices',
+            'q.correct_index',
+            'q.model_answer',
+            'q.note',
+            'q.hashtags',
+            'q.created_at',
+            'q.author_id',
+            'q.visibility',
+            'q.category_tag',
+            'q.bundle_id',
+            'q.bundle_order',
+            // プロフィール表示用
+            'u.display_name as author_display_name',
+            'u.ignos_id as author_ignos_id',
+        ])
+        ->where('q.visibility', 3)
+        ->orderByDesc('q.created_at')
+        ->limit(1000) // 必要に応じて調整
+        ->get();
+
+    // /api/quizzes と同じように JSON を decode
+    $rows->transform(function ($r) {
+        $r->choices = $r->choices ? json_decode($r->choices, true) : null;
+        $r->hashtags = $r->hashtags ? json_decode($r->hashtags, true) : [];
+        // created_at はそのまま返して OK（フロントで fromQuizRow が処理）
+        return $r;
+    });
+
+    return response()->json($rows);
+});
+
 /* ============================================================
    フィード API
    - POST   /api/feed       : フィード1件保存

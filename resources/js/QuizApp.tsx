@@ -50,6 +50,7 @@ import {
   getCategoryLarges,
   getCategoryMiddles,
   getCategorySmalls,
+  getGlobalQuizzes,
 } from "./api/client";
 
 import type { UserSearchResult, CategoryLarge, CategoryMiddle, CategorySmall, } from "./api/client";
@@ -82,7 +83,20 @@ console.log("DEBUG IS_ADMIN =", IS_ADMIN);
 import { ProfileScreen } from "./components/profile/ProfileScreen";
 import { QuizPostCard } from "./components/ui/QuizPostCard";
 
-  // ★ フォロー中ユーザーID一覧
+// 議論系
+import DiscussionList from "./components/discussion/DiscussionList";
+import DiscussionDetailView from "./components/discussion/DiscussionDetail";
+import DiscussionComposer from "./components/discussion/DiscussionComposer";
+import OpinionComposer from "./components/discussion/OpinionComposer";
+import {
+  fetchDiscussions,
+  fetchDiscussionDetail,
+  createDiscussion,
+  createOpinion,
+  voteOpinion as apiVoteOpinion,
+} from "./api/discussion";
+import type { DiscussionSummary, DiscussionDetail } from "./types/discussion";
+// ★ フォロー中ユーザーID一覧
   
 
 /**
@@ -985,13 +999,39 @@ const FolderList: React.FC<{
   const [openMiddleId, setOpenMiddleId] = useState<number | null>(null);
   const [openSmallId, setOpenSmallId] = useState<number | null>(null);
 
-  const tagCount = useMemo(() => {
-    const map = new Map<string, number>();
-    posts.forEach((p) =>
-      p.hashtags.forEach((t) => map.set(t, (map.get(t) ?? 0) + 1))
-    );
-    return Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
-  }, [posts]);
+const tagCount = useMemo(() => {
+  // tag -> { count: 出現回数, latest: そのタグを持つ投稿の中で最新の createdAt }
+  const map = new Map<string, { count: number; latest: number }>();
+
+  posts.forEach((p) => {
+    // createdAt が number 前提ですが、もし string の場合にも一応対応
+    const ts =
+      typeof p.createdAt === "number"
+        ? p.createdAt
+        : new Date(p.createdAt as any).getTime();
+
+    (p.hashtags ?? []).forEach((t) => {
+      const info = map.get(t);
+      if (!info) {
+        map.set(t, { count: 1, latest: ts });
+      } else {
+        info.count += 1;
+        if (ts > info.latest) info.latest = ts;
+      }
+    });
+  });
+
+  // 「新しく追加されたタグ順」にソート（latest の降順）
+  const sorted = Array.from(map.entries()).sort(
+    (a, b) => b[1].latest - a[1].latest
+  );
+
+  // 上位20件だけ使う。返り値は [tag, count] の形のままにしておく
+  return sorted
+    .slice(0, 20)
+    .map(([tag, info]) => [tag, info.count] as [string, number]);
+}, [posts]);
+
 
   // 検索キーワードでタグを絞り込み
   const filteredTagCount = useMemo(() => {
@@ -1863,6 +1903,14 @@ const QuizRunner: React.FC<{
 export default function QuizApp() {
   const [posts, setPosts] = useState<QuizPost[]>([]);
   const [feed, setFeed] = useState<FeedItem[]>([]);
+const [globalPosts, setGlobalPosts] = useState<QuizPost[]>([]);
+
+const postsForTags = useMemo(() => {
+  const map = new Map<string, QuizPost>();
+  posts.forEach((p) => map.set(p.id, p));
+  globalPosts.forEach((p) => map.set(p.id, p));
+  return Array.from(map.values());
+}, [posts, globalPosts]);
 
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [composerOpen, setComposerOpen] = useState(false);
@@ -1871,9 +1919,17 @@ export default function QuizApp() {
   const [editTargetPosts, setEditTargetPosts] = useState<QuizPost[] | null>(null);
   const [editFeedId, setEditFeedId] = useState<string | null>(null);
 
-  const [mode, setMode] = useState<
-    "home" | "folders" | "quiz" | "search" | "notifications" | "answer"  | "profile"
-  >("home");
+const [mode, setMode] = useState<
+  | "home"
+  | "folders"
+  | "quiz"
+  | "search"
+  | "notifications"
+  | "answer"
+  | "profile"
+  | "discussions"       // ★議論一覧
+  | "discussionDetail"  // ★議論詳細
+>("home");
   const [answerPool, setAnswerPool] = useState<QuizPost[] | null>(null);
   // const [hasApiData, setHasApiData] = useState(false);
   
@@ -1904,6 +1960,16 @@ const [categorySmalls, setCategorySmalls] = useState<CategorySmall[]>([]);
 const [isSidebarOpen, setSidebarOpen] = useState(false);
 const [isToolsOpen, setToolsOpen] = useState(false);
 const [bulkImportOpen, setBulkImportOpen] = useState(false);
+
+const [discussions, setDiscussions] = useState<DiscussionSummary[]>([]);
+const [discussionKeyword, setDiscussionKeyword] = useState("");
+const [selectedDiscussion, setSelectedDiscussion] =
+  useState<DiscussionDetail | null>(null);
+
+const [isDiscussionComposerOpen, setIsDiscussionComposerOpen] = useState(false);
+const [isOpinionComposerOpen, setIsOpinionComposerOpen] = useState(false);
+
+
 // QuizApp コンポーネント内
 
 const loadQuizzesAndFeed = async () => {
@@ -1975,6 +2041,50 @@ console.log("DEBUG /quizzes author summary =", authorSummary);
   }
 };
 
+// 議論API呼び出し関数
+const loadDiscussions = async () => {
+  const list = await fetchDiscussions(discussionKeyword || undefined);
+  setDiscussions(list);
+};
+
+const openDiscussion = async (id: number) => {
+  const detail = await fetchDiscussionDetail(id, CURRENT_USER_ID);
+  setSelectedDiscussion(detail);
+  setMode("discussionDetail");
+};
+
+const handleCreateDiscussion = async (payload: {
+  title: string;
+  agenda: string;
+  tags: string[];
+}) => {
+  const created = await createDiscussion(payload);
+  // 一覧に即時反映（先頭に追加）
+  setDiscussions((prev) => [created, ...prev]);
+};
+
+const handleCreateOpinion = async (payload: {
+  body: string;
+  choices: string[];
+}) => {
+  if (!selectedDiscussion) return;
+  const opinion = await createOpinion(selectedDiscussion.id, payload);
+  setSelectedDiscussion((prev) =>
+    prev
+      ? { ...prev, opinions: [opinion, ...prev.opinions] }
+      : prev
+  );
+};
+
+const handleVoteOpinion = async (opinionId: number, choiceId: number) => {
+  await apiVoteOpinion(opinionId, choiceId);
+  // 最新状態を取り直す（シンプルな実装）
+  if (selectedDiscussion) {
+    const detail = await fetchDiscussionDetail(selectedDiscussion.id, CURRENT_USER_ID);
+    setSelectedDiscussion(detail);
+  }
+};
+
 
 useEffect(() => {
   if (!CURRENT_USER_ID) return; // 未ログインなら何もしない
@@ -2005,6 +2115,20 @@ useEffect(() => {
 
 useEffect(() => {
   loadQuizzesAndFeed();
+}, []);
+
+useEffect(() => {
+  const loadGlobalQuizzes = async () => {
+    try {
+      const rows = await getGlobalQuizzes();
+      const apiPosts = rows.map(fromQuizRow);
+      setGlobalPosts(apiPosts);
+    } catch (e) {
+      console.error("API /quizzes/global 取得に失敗しました", e);
+    }
+  };
+
+  loadGlobalQuizzes();
 }, []);
 
 // 一定時間ごとに最新投稿を取得（例：60秒）
@@ -2042,10 +2166,6 @@ useEffect(() => {
 
   fetchCategories();
 }, []);
-
-
-
-
 
   const startQuiz = (tag: string) => {
     setSelectedTag(tag);
@@ -2373,7 +2493,12 @@ const openEditForFeedItem = (item: FeedItem) => {
   const activeTab = mode;
 
   return (
-    <div className="min-h-[100dvh] bg-white text-gray-900 pb-16">
+    // 背景色切り替え
+    // bg-white 真っ白
+    // bg-[#FAF9F6] 紙の質感に近い
+    // bg-[#F7F3E9] 少しクリーム寄り
+    // bg-[#FDFCF7] 現代Webアプリで使われるナチュラル系
+    <div className="min-h-[100dvh] bg-[#FAF9F6] text-gray-900 pb-16">
       <Header
   onOpenSidebar={() => setSidebarOpen(true)}
   onOpenTools={() => setToolsOpen(true)}
@@ -2559,7 +2684,7 @@ const openEditForFeedItem = (item: FeedItem) => {
         {/* FOLDERS */}
         {mode === "folders" && (
           <FolderList
-            posts={posts}
+            posts={postsForTags}
             onStartQuiz={startQuiz}
             onShare={openShare}
             // categoryTree={[]}
@@ -2569,11 +2694,33 @@ const openEditForFeedItem = (item: FeedItem) => {
           />
         )}
 
+     {/* DISCUSSIONS：議論一覧 */}
+      {mode === "discussions" && (
+        <DiscussionList
+          keyword={discussionKeyword}
+          discussions={discussions}
+          onKeywordChange={setDiscussionKeyword}
+          onSearch={loadDiscussions}
+          onSelectDiscussion={openDiscussion}
+          onOpenComposer={() => setIsDiscussionComposerOpen(true)}
+        />
+      )}
+
+      {/* DISCUSSION DETAIL：議論詳細 */}
+      {mode === "discussionDetail" && selectedDiscussion && (
+        <DiscussionDetailView
+          detail={selectedDiscussion}
+          onBack={() => setMode("discussions")}
+          onOpenOpinionComposer={() => setIsOpinionComposerOpen(true)}
+          onVote={handleVoteOpinion}
+        />
+      )}
+
         {/* QUIZ */}
 {mode === "quiz" && selectedTag && (
   <QuizRunner
     tag={selectedTag}
-    posts={posts}
+    posts={postsForTags}
     onBack={backToFolders}
     followIds={followIds}
     onToggleFollow={toggleFollow}
@@ -2709,8 +2856,6 @@ const openEditForFeedItem = (item: FeedItem) => {
   </>
 )}
 
-
-
         <div className="h-4" />
       </div>
 
@@ -2762,6 +2907,19 @@ const openEditForFeedItem = (item: FeedItem) => {
         </div>
       </Modal>
 
+     {/* ★議論用モーダル */}
+      <DiscussionComposer
+        open={isDiscussionComposerOpen}
+        onClose={() => setIsDiscussionComposerOpen(false)}
+        onSubmit={handleCreateDiscussion}
+      />
+
+      <OpinionComposer
+        open={isOpinionComposerOpen}
+        onClose={() => setIsOpinionComposerOpen(false)}
+        onSubmit={handleCreateOpinion}
+      />
+
       {/* ▶ ホーム画面用フローティング投稿ボタン（ブルースカイ風） ◀ */}
       {mode === "home" && (
         <button
@@ -2793,6 +2951,24 @@ onClick={() => {
         </button>
       )}
 
+      {mode === "discussions" && (
+  <button
+    className="fixed right-4 bottom-16 rounded-full px-4 py-3 shadow-lg bg-blue-500 text-white text-sm"
+    onClick={() => setIsDiscussionComposerOpen(true)}
+  >
+    議題投稿
+  </button>
+)}
+
+{mode === "discussionDetail" && (
+  <button
+    className="fixed right-4 bottom-16 rounded-full px-4 py-3 shadow-lg bg-blue-500 text-white text-sm"
+    onClick={() => setIsOpinionComposerOpen(true)}
+  >
+    意見投稿
+  </button>
+)}
+
       {/* ボトムナビ */}
       <BottomNav
         active={activeTab}
@@ -2802,6 +2978,10 @@ onClick={() => {
   }}
         onSearch={() => setMode("search")}
         onFolders={() => setMode("folders")}
+          onDiscussions={() => {
+    setMode("discussions");
+    loadDiscussions();
+  }}
         onNotify={() => setMode("notifications")}
   onProfile={() => {
     if (!CURRENT_USER_ID) return; // 未ログインなら何もしない
