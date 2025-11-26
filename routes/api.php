@@ -4,7 +4,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-
+use App\Http\Controllers\DiscussionController;
+use App\Http\Controllers\DiscussionOpinionController;
+use App\Http\Controllers\DiscussionVoteController;
 /*
 |--------------------------------------------------------------------------
 | API Routes
@@ -553,3 +555,63 @@ Route::get('/category-smalls', function () {
         ], 500);
     }
 });
+
+// 認証が必要なら ->middleware('auth') を適宜追加
+Route::middleware('auth')->group(function () {
+    // 議題一覧＆検索
+    Route::get('/discussions', [DiscussionController::class, 'index']);
+
+    // 議題作成
+    Route::post('/discussions', [DiscussionController::class, 'store']);
+
+    // 議題詳細（意見＋投票状況）
+    Route::get('/discussions/{discussion}', [DiscussionController::class, 'show']);
+
+    // 意見投稿
+    Route::post('/discussions/{discussion}/opinions', [DiscussionOpinionController::class, 'store']);
+
+    // 投票（賛成/反対/パス）
+    Route::post('/discussions/opinions/{opinion}/vote', [DiscussionVoteController::class, 'store']);
+});
+
+/**
+ * POST /api/quizzes/{id}/visibility
+ * body: { visibility: 1|2|3, user_id?: number }
+ * 指定クイズの公開範囲を変更する
+ */
+Route::post('/quizzes/{id}/visibility', function (Request $request, string $id) {
+    $visibility = (int) $request->input('visibility', 0);
+    $userId     = (int) $request->input('user_id', 0); // 任意（将来 author チェックしたい時用）
+
+    // 値チェック
+    if (!in_array($visibility, [1, 2, 3], true)) {
+        return response()->json([
+            'ok'      => false,
+            'message' => 'visibility は 1(自分のみ) / 2(フォロワー限定) / 3(グローバル) のいずれかです',
+        ], 422);
+    }
+
+    // ここで「自分の投稿だけ変更可」にしたい場合
+    // user_id が送られていなければとりあえず author チェックなしで更新
+    $query = DB::table('quizzes')->where('id', $id);
+
+    if ($userId > 0) {
+        // 将来的な安全のため：author_id が自分のものだけ更新
+        $query->where('author_id', $userId);
+    }
+
+    $updated = $query->update(['visibility' => $visibility]);
+
+    if ($updated === 0) {
+        // id が存在しない or 自分の投稿ではない
+        return response()->json([
+            'ok'      => false,
+            'message' => '対象のクイズが見つからないか、更新権限がありません',
+        ], 404);
+    }
+
+    return response()->json([
+        'ok'         => true,
+        'visibility' => $visibility,
+    ]);
+})->withoutMiddleware(VerifyCsrfToken::class);

@@ -6,6 +6,7 @@ export const API_BASE = (RAW_BASE as string).replace(/\/$/, "");
 console.log("VITE_API_BASE =", API_BASE);
 import type { QuizRowFromApi } from "./mapper";
 import axios from "axios";
+import type { Visibility } from "../types/quiz";
 
 // 共通: fetch 失敗時にサーバの応答も添えて投げる
 const assertOk = async (res: Response, label: string) => {
@@ -92,6 +93,36 @@ export async function bulkUpsertQuizzes(rows: any[]) {
   });
   await assertOk(res, "bulkUpsertQuizzes");
 }
+
+export async function updateQuizVisibility(
+  id: string,
+  visibility: Visibility
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/quizzes/${id}/visibility`, {
+    method: "POST", // ここはバックエンドに合わせて POST / PATCH どちらでもOK
+    headers: {
+      "Content-Type": "application/json",
+      "X-Requested-With": "XMLHttpRequest",
+    },
+    credentials: "include",
+    body: JSON.stringify({ visibility }),
+  });
+  await assertOk(res, "updateQuizVisibility");
+}
+
+// export async function deleteQuizzes(ids: string[]): Promise<void> {
+//   if (!ids.length) return;
+
+//   await fetch(`${API_BASE}/quizzes/bulk-delete`, {
+//     method: "POST",
+//     headers: {
+//       "Content-Type": "application/json",
+//       "X-Requested-With": "XMLHttpRequest",
+//     },
+//     credentials: "include",
+//     body: JSON.stringify({ ids }),
+//   });
+// }
 
 export type UserSearchResult = {
   id: number;

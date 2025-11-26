@@ -1,17 +1,19 @@
 // resources/js/components/discussion/DiscussionDetail.tsx
 import React from "react";
-import type { DiscussionDetail, DiscussionOpinion } from "../../types/discussion";
+import type {
+  DiscussionDetail as DiscussionDetailType,
+  DiscussionOpinion,
+  VoteKind,
+} from "../../types/discussion";
 import { Card } from "../ui/Card";
 
 type Props = {
-  detail: DiscussionDetail;
+  detail: DiscussionDetailType;
   onBack: () => void;
   onOpenOpinionComposer: () => void;
-  onVote: (opinionId: number, choiceId: number) => void;
+  // ★ ここを変更：choiceId:number → vote:VoteKind
+  onVote: (opinionId: number, vote: VoteKind) => void;
 };
-
-const calcPercent = (voteCount: number, total: number) =>
-  total > 0 ? Math.round((voteCount / total) * 100) : 0;
 
 const DiscussionDetailView: React.FC<Props> = ({
   detail,
@@ -21,7 +23,7 @@ const DiscussionDetailView: React.FC<Props> = ({
 }) => {
   return (
     <div className="flex flex-col h-full pb-16">
-      {/* ヘッダーエリア */}
+      {/* 上部ヘッダー（タイトル＋アジェンダ＋タグ） */}
       <div className="sticky top-0 z-10 bg-white/90 backdrop-blur border-b">
         <div className="flex items-center gap-2 px-3 py-2">
           <button
@@ -55,7 +57,8 @@ const DiscussionDetailView: React.FC<Props> = ({
           <OpinionCard
             key={opinion.id}
             opinion={opinion}
-            onVote={(choiceId) => onVote(opinion.id, choiceId)}
+            // ★ opinion.id と vote を親へ渡す
+            onVote={(vote) => onVote(opinion.id, vote)}
           />
         ))}
 
@@ -73,51 +76,87 @@ const DiscussionDetailView: React.FC<Props> = ({
 
 type OpinionCardProps = {
   opinion: DiscussionOpinion;
-  onVote: (choiceId: number) => void;
+  // ★ ここも VoteKind を使う
+  onVote: (vote: VoteKind) => void;
 };
 
 const OpinionCard: React.FC<OpinionCardProps> = ({ opinion, onVote }) => {
-  const hasVoted = opinion.myChoiceId != null;
+  const { visible, agree, disagree, pass, total, myVote } = opinion.stats;
+
+  const percent = (n: number) =>
+    total > 0 ? Math.round((n / total) * 100) : 0;
+
+  const hasVoted = myVote !== null;
 
   return (
     <Card className="flex flex-col gap-2">
       <div className="text-sm whitespace-pre-wrap">{opinion.body}</div>
 
-      <div className="flex flex-col gap-1">
-        {opinion.choices.map((c) => {
-          const percent = calcPercent(c.voteCount, opinion.totalVotes);
-          const isMyChoice = opinion.myChoiceId === c.id;
-
-          return (
-            <button
-              key={c.id}
-              className={`
-                flex items-center gap-2 text-xs w-full text-left border rounded px-2 py-1
-                ${hasVoted ? "bg-gray-50" : "bg-white"}
-                ${isMyChoice ? "border-blue-400" : "border-gray-200"}
-                ${hasVoted ? "cursor-default" : "cursor-pointer"}
-              `}
-              disabled={hasVoted}
-              onClick={() => !hasVoted && onVote(c.id)}
-            >
-              <span className="flex-1">
-                {c.label}
-                {isMyChoice && (
-                  <span className="ml-1 text-blue-500">（あなたの選択）</span>
-                )}
-              </span>
-              <span className="text-xs text-gray-600">
-                {percent}%
-              </span>
-            </button>
-          );
-        })}
+      {/* 投票ボタン行 */}
+      <div className="flex gap-2 text-xs">
+        <VoteButton
+          label="賛成"
+          active={myVote === "agree"}
+          disabled={hasVoted}
+          percent={visible ? percent(agree) : undefined}
+          onClick={() => onVote("agree")}
+        />
+        <VoteButton
+          label="反対"
+          active={myVote === "disagree"}
+          disabled={hasVoted}
+          percent={visible ? percent(disagree) : undefined}
+          onClick={() => onVote("disagree")}
+        />
+        <VoteButton
+          label="パス"
+          active={myVote === "pass"}
+          disabled={hasVoted}
+          percent={visible ? percent(pass) : undefined}
+          onClick={() => onVote("pass")}
+        />
       </div>
 
       <div className="text-[11px] text-gray-500">
-        投票数: {opinion.totalVotes}
+        {visible ? <>投票数: {total}</> : <>投票後に結果が表示されます</>}
       </div>
     </Card>
+  );
+};
+
+type VoteButtonProps = {
+  label: string;
+  active: boolean;
+  disabled: boolean;
+  // visible=false のときは undefined にして「%」を隠す
+  percent?: number;
+  onClick: () => void;
+};
+
+const VoteButton: React.FC<VoteButtonProps> = ({
+  label,
+  active,
+  disabled,
+  percent,
+  onClick,
+}) => {
+  const showPercent = typeof percent === "number";
+
+  return (
+    <button
+      className={`
+        flex-1 border rounded px-2 py-1 flex flex-col items-center
+        ${active ? "border-blue-500 bg-blue-50" : "border-gray-200 bg-white"}
+        ${disabled && !active ? "opacity-60 cursor-default" : ""}
+      `}
+      disabled={disabled && !active}
+      onClick={onClick}
+    >
+      <span className="text-xs">{label}</span>
+      <span className="text-[11px] text-gray-600 min-h-[1rem]">
+        {showPercent ? `${percent}%` : "--"}
+      </span>
+    </button>
   );
 };
 

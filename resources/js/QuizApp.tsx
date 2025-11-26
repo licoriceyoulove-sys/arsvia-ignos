@@ -51,6 +51,7 @@ import {
   getCategoryMiddles,
   getCategorySmalls,
   getGlobalQuizzes,
+  updateQuizVisibility,
 } from "./api/client";
 
 import type { UserSearchResult, CategoryLarge, CategoryMiddle, CategorySmall, } from "./api/client";
@@ -93,9 +94,16 @@ import {
   fetchDiscussionDetail,
   createDiscussion,
   createOpinion,
-  voteOpinion as apiVoteOpinion,
+  voteOpinion,
 } from "./api/discussion";
-import type { DiscussionSummary, DiscussionDetail } from "./types/discussion";
+import type {
+  DiscussionSummary,
+  DiscussionDetail,
+  DiscussionOpinion,
+  OpinionVoteStats,
+  VoteKind,
+} from "./types/discussion";
+import { VisibilityIcon } from "./components/ui/VisibilityIcon";
 // ★ フォロー中ユーザーID一覧
   
 
@@ -147,6 +155,42 @@ const formatDateYMD = (ts: number) => {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}/${m}/${day}`;
+};
+
+// ★ 公開範囲アイコン
+// visibility: 1 = 自分のみ, 2 = フォロワー限定, 3 = グローバル
+const renderVisibilityIcon = (v?: Visibility | null) => {
+  if (v === 1) {
+    return (
+      <span
+        className="inline-flex items-center justify-center w-5 h-5 text-[10px]"
+        title="自分のみ"
+      >
+        🔒
+      </span>
+    );
+  }
+  if (v === 2) {
+    return (
+      <span
+        className="inline-flex items-center justify-center w-5 h-5 text-[10px]"
+        title="フォロワー限定"
+      >
+        👥
+      </span>
+    );
+  }
+  if (v === 3) {
+    return (
+      <span
+        className="inline-flex items-center justify-center w-5 h-5 text-[10px]"
+        title="グローバル"
+      >
+        🌐
+      </span>
+    );
+  }
+  return null;
 };
 
 /* =========================
@@ -1969,6 +2013,80 @@ const [selectedDiscussion, setSelectedDiscussion] =
 const [isDiscussionComposerOpen, setIsDiscussionComposerOpen] = useState(false);
 const [isOpinionComposerOpen, setIsOpinionComposerOpen] = useState(false);
 
+ // ★ 公開範囲変更モーダル用 state
+  const [visibilityModal, setVisibilityModal] = useState<{
+    quizId: string;
+    current: Visibility;
+  } | null>(null);
+  const [isUpdatingVisibility, setIsUpdatingVisibility] = useState(false);
+
+  const openVisibilityModal = (quizId: string, current?: Visibility | null) => {
+    const safeCurrent: Visibility = (current ?? 3) as Visibility; // デフォルト: グローバル
+    setVisibilityModal({ quizId, current: safeCurrent });
+  };
+
+  const closeVisibilityModal = () => {
+    setVisibilityModal(null);
+  };
+
+const handleChangeVisibility = async (v: Visibility) => {
+  if (!visibilityModal) return;
+
+  const quizId = visibilityModal.quizId;
+
+  try {
+    setIsUpdatingVisibility(true);
+
+    // 1) API で公開範囲を更新
+    await updateQuizVisibility(quizId, v);
+
+    // 2) posts / globalPosts の visibility を更新
+    setPosts((prev) =>
+      prev.map((p) => (p.id === quizId ? { ...p, visibility: v } : p))
+    );
+    setGlobalPosts((prev) =>
+      prev.map((p) => (p.id === quizId ? { ...p, visibility: v } : p))
+    );
+
+    // 3) ★ feed の中の該当投稿も更新（単発 / まとめ両方）
+    setFeed((prev) =>
+      prev.map((item) => {
+        if (item.kind === "quiz") {
+          // 単発投稿
+          const quiz = item.data as QuizPost;
+          if (quiz.id !== quizId) return item;
+          return {
+            ...item,
+            data: { ...quiz, visibility: v },
+          };
+        }
+
+        if (item.kind === "quizBundle") {
+          // まとめ投稿：中の配列のうち該当クイズだけ visibility 更新
+          const updatedBundle = item.data.map((p) =>
+            p.id === quizId ? { ...p, visibility: v } : p
+          );
+          return {
+            ...item,
+            data: updatedBundle,
+          };
+        }
+
+        // share など他の種類はそのまま
+        return item;
+      })
+    );
+
+    // 4) モーダルを閉じる
+    setVisibilityModal(null);
+  } catch (e) {
+    console.error(e);
+    alert("公開範囲の変更に失敗しました。");
+  } finally {
+    setIsUpdatingVisibility(false);
+  }
+};
+
 
 // QuizApp コンポーネント内
 
@@ -2048,7 +2166,7 @@ const loadDiscussions = async () => {
 };
 
 const openDiscussion = async (id: number) => {
-  const detail = await fetchDiscussionDetail(id, CURRENT_USER_ID);
+  const detail = await fetchDiscussionDetail(id);  // ★ 引数は1つだけ
   setSelectedDiscussion(detail);
   setMode("discussionDetail");
 };
@@ -2058,32 +2176,44 @@ const handleCreateDiscussion = async (payload: {
   agenda: string;
   tags: string[];
 }) => {
-  const created = await createDiscussion(payload);
-  // 一覧に即時反映（先頭に追加）
-  setDiscussions((prev) => [created, ...prev]);
+  try {
+    const created = await createDiscussion(payload);
+    // 一覧に即時反映（先頭に追加）
+    setDiscussions((prev) => [created, ...prev]);
+    // モーダルを閉じる
+    setIsDiscussionComposerOpen(false);
+  } catch (e) {
+    console.error("Failed to create discussion", e);
+    // 必要なら alert など
+  }
 };
 
-const handleCreateOpinion = async (payload: {
-  body: string;
-  choices: string[];
-}) => {
+
+const handleCreateOpinion = async (payload: { body: string }) => {
   if (!selectedDiscussion) return;
-  const opinion = await createOpinion(selectedDiscussion.id, payload);
-  setSelectedDiscussion((prev) =>
-    prev
-      ? { ...prev, opinions: [opinion, ...prev.opinions] }
-      : prev
-  );
+  try {
+    const opinion = await createOpinion(selectedDiscussion.id, payload);
+    setSelectedDiscussion((prev) =>
+      prev
+        ? { ...prev, opinions: [opinion, ...prev.opinions] }
+        : prev
+    );
+    setIsOpinionComposerOpen(false);
+  } catch (e) {
+    console.error("Failed to create opinion", e);
+  }
 };
 
-const handleVoteOpinion = async (opinionId: number, choiceId: number) => {
-  await apiVoteOpinion(opinionId, choiceId);
-  // 最新状態を取り直す（シンプルな実装）
+
+
+const handleVoteOpinion = async (opinionId: number, vote: VoteKind) => {
+  await voteOpinion(opinionId, vote);
   if (selectedDiscussion) {
-    const detail = await fetchDiscussionDetail(selectedDiscussion.id, CURRENT_USER_ID);
+    const detail = await fetchDiscussionDetail(selectedDiscussion.id);
     setSelectedDiscussion(detail);
   }
 };
+
 
 
 useEffect(() => {
@@ -2543,6 +2673,10 @@ const openEditForFeedItem = (item: FeedItem) => {
     }
     onOpenProfile={(authorId) => openProfile(authorId as number)}
     onTagClick={(tag) => startQuiz(tag)}
+    visibility={item.data.visibility}
+    onClickVisibility={() =>
+      openVisibilityModal(item.data.id, item.data.visibility)
+    }
   />
 ) : item.kind === "quizBundle" ? (
   (() => {
@@ -2579,72 +2713,91 @@ const openEditForFeedItem = (item: FeedItem) => {
       setMode("answer");
     };
 
-    return (
-      <>
-        {/* ▼ ヘッダー行：左＝ユーザー、右＝タグ＋… */}
-        <div className="flex items-start justify-between gap-2 mb-2">
-          {/* 先頭問題のユーザー行 */}
-          <button
-            type="button"
-            onClick={() => openProfile(first?.author_id)}
-            className="flex items-center gap-2"
-          >
-            <div className="w-9 h-9 rounded-full bg-gray-300" />
-            <div className="flex flex-col items-start">
-              <span className="text-sm font-bold">{displayName}</span>
-              <span className="text-xs text-gray-500">@{ignosId}</span>
-            </div>
-          </button>
+return (
+  <>
+    {/* ▼ ヘッダー行：ユーザー情報のみ */}
+    <div className="flex items-start justify-between gap-2 mb-1">
+      {/* 先頭問題のユーザー行 */}
+      <button
+        type="button"
+        onClick={() => openProfile(first?.author_id)}
+        className="flex items-center gap-2"
+      >
+        <div className="w-9 h-9 rounded-full bg-gray-300" />
+        <div className="flex flex-col items-start">
+          <span className="text-sm font-bold">{displayName}</span>
+          <span className="text-xs text-gray-500">@{ignosId}</span>
+        </div>
+      </button>
+    </div>
 
-          {/* タグ（1個＋「…」） */}
+    {/* ▼ タグ + 公開範囲アイコン行 */}
+    {(mainBundleTag || first?.visibility != null) && (
+      <div className="flex items-center justify-between mb-2">
+        {/* 左：代表タグ＋「…」 */}
+        <div className="flex items-center gap-1 max-w-[70%] overflow-hidden whitespace-nowrap">
           {mainBundleTag && (
-            <div className="flex items-center justify-end gap-1 max-w-[50%] overflow-hidden whitespace-nowrap">
-              <TagChip
-                key={mainBundleTag + item.id}
-                tag={mainBundleTag}
-                onClick={() => startQuiz(mainBundleTag)}
-              />
-              {hasMoreBundleTags && (
-                <span className="text-xs text-gray-500 align-middle">…</span>
-              )}
-            </div>
+            <TagChip
+              key={mainBundleTag + item.id}
+              tag={mainBundleTag}
+              onClick={() => startQuiz(mainBundleTag)}
+            />
+          )}
+          {hasMoreBundleTags && (
+            <span className="text-xs text-gray-500 align-middle">…</span>
           )}
         </div>
 
-        {/* ▼ タイトル部分：タップで回答開始 */}
-        <div
-          className="text-[15px] whitespace-pre-wrap mb-2 cursor-pointer"
-          onClick={handleAnswer}
+        {/* 右：公開範囲アイコン（先頭問題の visibility を代表として使用） */}
+        <button
+          type="button"
+          className="ml-2 flex-shrink-0"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (!first) return;
+            // ★ QuizApp 内で定義した openVisibilityModal を呼ぶ
+            openVisibilityModal(first.id, first.visibility);
+          }}
         >
-          {bundleTitle}
-        </div>
-        <div
-          className="text-xs text-gray-500 mb-2 cursor-pointer"
-          onClick={handleAnswer}
-        >
-          全{item.data.length}問
-        </div>
+          <VisibilityIcon value={first.visibility ?? null} />
+        </button>
+      </div>
+    )}
 
-        <ActionBar
-          likes={item.likes}
-          retweets={item.retweets}
-          answers={item.answers}
-          onLike={() => incLike(item.id)}
-          onRT={() => incRT(item.id)}
-          onAnswer={handleAnswer}
-            isMarked={item.isMarked ?? false}
-  onToggleMark={() => toggleMark(item.id)}
+    {/* ▼ タイトル部分：タップで回答開始（この下は今のままでOK） */}
+    <div
+      className="text-[15px] whitespace-pre-wrap mb-2 cursor-pointer"
+      onClick={handleAnswer}
+    >
+      {bundleTitle}
+    </div>
+    <div
+      className="text-xs text-gray-500 mb-2 cursor-pointer"
+      onClick={handleAnswer}
+    >
+      全{item.data.length}問
+    </div>
 
-          isMine={first?.author_id === CURRENT_USER_ID}
-          onEdit={
-            first?.author_id === CURRENT_USER_ID
-              ? () => openEditForFeedItem(item)
-              : undefined
-          }
-        createdAtText={formatDateYMD(item.createdAt)}
-        />
-      </>
-    );
+    <ActionBar
+      likes={item.likes}
+      retweets={item.retweets}
+      answers={item.answers}
+      onLike={() => incLike(item.id)}
+      onRT={() => incRT(item.id)}
+      onAnswer={handleAnswer}
+      isMarked={item.isMarked ?? false}
+      onToggleMark={() => toggleMark(item.id)}
+      isMine={first?.author_id === CURRENT_USER_ID}
+      onEdit={
+        first?.author_id === CURRENT_USER_ID
+          ? () => openEditForFeedItem(item)
+          : undefined
+      }
+      createdAtText={formatDateYMD(item.createdAt)}
+    />
+  </>
+);
+
   })()
 ) : (
 
@@ -2869,6 +3022,61 @@ const openEditForFeedItem = (item: FeedItem) => {
     onCancel={() => setComposerOpen(false)}
   />
 </Modal>
+
+<Modal open={visibilityModal != null} onClose={closeVisibilityModal}>
+  <div
+    className="
+      w-full max-w-xs mx-auto
+      mt-24 mb-8
+      p-4
+      bg-white rounded-2xl shadow-lg border border-gray-200
+      space-y-4
+    "
+  >
+    <h2 className="text-base font-semibold">公開範囲の変更</h2>
+
+    <div className="space-y-2">
+      {[
+        { value: 1 as Visibility, label: "プライベート", desc: "あなたのみ見ることができます" },
+        { value: 2 as Visibility, label: "フォロワー限定", desc: "フォロワーに公開" },
+        { value: 3 as Visibility, label: "グローバル", desc: "全てのユーザーに公開" },
+      ].map((opt) => {
+        const isSelected = visibilityModal?.current === opt.value;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            disabled={isUpdatingVisibility}
+            onClick={() => handleChangeVisibility(opt.value)}
+            className={`
+              w-full flex items-center gap-2 px-3 py-2 rounded border text-left text-sm
+              ${isSelected ? "bg-gray-100 border-gray-400" : "border-gray-200"}
+            `}
+          >
+            <span className="flex-shrink-0">
+              <VisibilityIcon value={opt.value} size="sm" />
+            </span>
+            <span className="flex-1">
+              <div className="font-medium">{opt.label}</div>
+              <div className="text-[11px] text-gray-500">{opt.desc}</div>
+            </span>
+          </button>
+        );
+      })}
+    </div>
+
+    <button
+      type="button"
+      className="mt-1 w-full text-xs text-gray-500 underline"
+      onClick={closeVisibilityModal}
+      disabled={isUpdatingVisibility}
+    >
+      キャンセル
+    </button>
+  </div>
+</Modal>
+
+
 
 {/* JSON 一括投入モーダル（admin専用） */}
 <Modal open={bulkImportOpen} onClose={() => setBulkImportOpen(false)}>
