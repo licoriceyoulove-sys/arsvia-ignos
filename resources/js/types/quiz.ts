@@ -48,6 +48,7 @@ export type SharePost = {
     likes: number;
     retweets: number;
     isMarked?: boolean;
+    answers: number;
 };
 
 export type FeedQuizItem = {
@@ -72,4 +73,14 @@ export type FeedQuizBundleItem = {
     isMarked?: boolean;
 };
 
-export type FeedItem = FeedQuizItem | FeedQuizBundleItem | SharePost;
+// export type FeedItem = FeedQuizItem | FeedQuizBundleItem | SharePost;
+export type FeedItem = {
+  id: string;
+  kind: "quiz" | "quizBundle" | "share";
+  data: any;
+  createdAt: number;
+  likes: number;
+  retweets: number;
+  answers: number;
+  isMarked?: boolean;
+};

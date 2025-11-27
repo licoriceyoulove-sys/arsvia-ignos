@@ -6,8 +6,8 @@ export const API_BASE = (RAW_BASE as string).replace(/\/$/, "");
 console.log("VITE_API_BASE =", API_BASE);
 import type { QuizRowFromApi } from "./mapper";
 import axios from "axios";
-import type { Visibility } from "../types/quiz";
-
+import type { Visibility, FeedItem } from "../types/quiz";
+import { CURRENT_USER_ID } from "../utils/user";
 // 共通: fetch 失敗時にサーバの応答も添えて投げる
 const assertOk = async (res: Response, label: string) => {
   if (!res.ok) {
@@ -167,10 +167,17 @@ export async function patchFeed(
   const res = await fetch(`${API_BASE}/feed/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ field }),
     credentials: "include",
+    body: JSON.stringify({
+      field,
+      user_id: CURRENT_USER_ID,  // ★ ここが超重要
+    }),
   });
-  await assertOk(res, "patchFeed");
+
+  if (!res.ok) {
+    console.error("patchFeed failed", await res.text());
+    throw new Error("patchFeed failed");
+  }
 }
 
 export async function deleteQuizzes(ids: string[]): Promise<void> {
@@ -274,3 +281,23 @@ export const getGlobalQuizzes = async (): Promise<QuizRowFromApi[]> => {
   );
   return res.data;
 };
+
+export async function getFeed(): Promise<FeedItem[]> {
+  const res = await fetch(`${API_BASE}/feed`, {
+    credentials: "include",
+  });
+  if (!res.ok) {
+    throw new Error("getFeed failed");
+  }
+  const json = await res.json();
+
+  return (json as any[]).map((row) => ({
+    id: row.id,
+    kind: row.kind,
+    data: row.data,
+    createdAt: new Date(row.createdAt).getTime(), // 文字列 -> 数字にしておくと便利
+    likes: row.likes ?? 0,        // ★ サーバーから来た値をそのまま使う
+    retweets: row.retweets ?? 0,  // ★
+    answers: row.answers ?? 0,    // ★
+  }));
+}

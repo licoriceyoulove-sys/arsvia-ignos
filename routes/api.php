@@ -4,9 +4,13 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+// use Illuminate\Support\Facades\Auth;
+
+
 use App\Http\Controllers\DiscussionController;
 use App\Http\Controllers\DiscussionOpinionController;
 use App\Http\Controllers\DiscussionVoteController;
+use App\Http\Middleware\VerifyCsrfToken;
 /*
 |--------------------------------------------------------------------------
 | API Routes
@@ -298,24 +302,84 @@ Route::post('/feed', function (Request $request) {
  * PATCH /api/feed/{id}
  * body: { field: "likes" | "retweets" | "answers" }
  */
-Route::patch('/feed/{id}', function (Request $request, string $id) {
-    $field = $request->input('field');
+Route::patch('/feed/{id}', function (Request $req, string $id) {
+    $field = $req->input('field'); // "likes" | "retweets" | "answers"
 
     if (!in_array($field, ['likes', 'retweets', 'answers'], true)) {
-        return response()->json([
-            'ok' => false,
-            'message' => 'field は likes / retweets / answers のいずれかです',
-        ], 422);
+        return response()->json(['error' => 'invalid field'], 400);
     }
 
-    DB::table('feed_items')
-        ->where('id', $id)
-        ->update([
-            $field => DB::raw("$field + 1"),
+    // フロントから送ってもらう user_id を使う
+    $userId = (int) $req->input('user_id', 0);
+    if ($userId <= 0) {
+        return response()->json(['error' => 'unauthenticated'], 401);
+    }
+
+    // ★ Answer は何回でもOK → 単純に +1
+    if ($field === 'answers') {
+        DB::table('feed_items')
+            ->where('id', $id)
+            ->increment('answers', 1);
+
+        return ['ok' => true];
+    }
+
+    // ★ Thanks / Look は 1ユーザー1回
+    $kind = $field === 'likes' ? 'like' : 'retweet';
+
+    DB::beginTransaction();
+    try {
+        // まだ押していなければ 1 行挿入される（既にあれば 0 行）
+        $inserted = DB::table('reactions')->insertOrIgnore([
+            'user_id'    => $userId,
+            'feed_id'    => $id,
+            'kind'       => $kind,
+            'created_at' => now(),
         ]);
 
-    return response()->json(['ok' => true]);
+        if ($inserted) {
+            // 初回だけ feed_items のカウントを +1
+            DB::table('feed_items')
+                ->where('id', $id)
+                ->increment($field, 1);
+        }
+
+        DB::commit();
+
+        return [
+            'ok'       => true,
+            'inserted' => (bool) $inserted, // true = 今回が初回リアクション
+        ];
+    } catch (\Throwable $e) {
+        DB::rollBack();
+        return response()->json(['error' => 'server_error'], 500);
+    }
 });
+
+// 追加：フィード一覧取得
+Route::get('/feed', function () {
+    $rows = DB::table('feed_items')
+        ->orderBy('created_at', 'desc')
+        ->get();
+
+    // DBの1行1行を、フロントの FeedItem 用の形に変換
+    $result = $rows->map(function ($r) {
+        $data = json_decode($r->data, true) ?: [];
+
+        return [
+            'id'        => $r->id,
+            'kind'      => $r->kind,                // "quiz" / "quizBundle" / "share"
+            'data'      => $data,                   // 投稿本体（クイズやシェア内容）
+            'createdAt' => $r->created_at,          // フロントで Date に変換してOK
+            'likes'     => (int) $r->likes,         // ★ DBの値をそのまま返す
+            'retweets'  => (int) $r->retweets,      // ★
+            'answers'   => (int) $r->answers,       // ★
+        ];
+    });
+
+    return response()->json($result);
+});
+
 
 /* ============================================================
    フォロー情報 API
@@ -556,22 +620,26 @@ Route::get('/category-smalls', function () {
     }
 });
 
-// 認証が必要なら ->middleware('auth') を適宜追加
-Route::middleware('auth')->group(function () {
-    // 議題一覧＆検索
+// ★ 議論API（セッションログインを使う版）
+Route::middleware('web')->group(function () {
+
+    // 議題一覧＆検索（閲覧はログイン必須にしたくなければ、このままでもOK）
     Route::get('/discussions', [DiscussionController::class, 'index']);
 
-    // 議題作成
-    Route::post('/discussions', [DiscussionController::class, 'store']);
+    // 議題作成（POST）は CSRF を外す
+    Route::post('/discussions', [DiscussionController::class, 'store'])
+        ->withoutMiddleware(VerifyCsrfToken::class);
 
-    // 議題詳細（意見＋投票状況）
+    // 議題詳細（GET）
     Route::get('/discussions/{discussion}', [DiscussionController::class, 'show']);
 
-    // 意見投稿
-    Route::post('/discussions/{discussion}/opinions', [DiscussionOpinionController::class, 'store']);
+    // 意見投稿（POST）も CSRF 外す
+    Route::post('/discussions/{discussion}/opinions', [DiscussionOpinionController::class, 'store'])
+        ->withoutMiddleware(VerifyCsrfToken::class);
 
-    // 投票（賛成/反対/パス）
-    Route::post('/discussions/opinions/{opinion}/vote', [DiscussionVoteController::class, 'store']);
+    // 投票（POST）も CSRF 外す
+    Route::post('/discussions/opinions/{opinion}/vote', [DiscussionVoteController::class, 'store'])
+        ->withoutMiddleware(VerifyCsrfToken::class);
 });
 
 /**
@@ -614,4 +682,5 @@ Route::post('/quizzes/{id}/visibility', function (Request $request, string $id) 
         'ok'         => true,
         'visibility' => $visibility,
     ]);
-})->withoutMiddleware(VerifyCsrfToken::class);
+// })->withoutMiddleware(VerifyCsrfToken::class);
+})->withoutMiddleware(\App\Http\Middleware\VerifyCsrfToken::class);

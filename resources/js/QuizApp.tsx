@@ -848,6 +848,7 @@ const BulkImportDialog: React.FC<{
 - 配列の最上位以外は一切出力しない（説明文・補足禁止）
 - コメントや余計な文字は禁止
 - 50問以内で作成すること
+- 選択肢は理解力を高める目的で、間違えやすいものにしてください。過去問などがあればそれを優先して参照してください。
 
 【1問の形式】
 {
@@ -855,7 +856,7 @@ const BulkImportDialog: React.FC<{
   "type": "choice" または "text",
   "correct": "正解",
   "wrongs": ["不正解1", "不正解3"],
-  "note": "各選択肢に関する補足・根拠を読んだだけで理解深まる品質で、必要に応じて例文を交えながら丁寧語で解説してください"
+  "note": "読みやすくなるように改行を適宜行ってください。中学生が読んでも理解できるレベルで解説を行ってください。各選択肢に関する補足・根拠を必ずつけてください。どこに気を付ければ解くことができるか、アドバイスしてください。語学系であれば必要に応じて訳文や例文を付けてください。長文になって構いませんので、解説は丁寧にお願いします。解説文や問題文に専門用語が含まれる場合は、解説の一番後ろに用語解説を箇条書きでよいのでつけてください。"
 }
 
 【生成してほしい内容】
@@ -2171,22 +2172,20 @@ const openDiscussion = async (id: number) => {
   setMode("discussionDetail");
 };
 
-const handleCreateDiscussion = async (payload: {
+async function handleCreateDiscussion(payload: {
   title: string;
   agenda: string;
   tags: string[];
-}) => {
+}) {
   try {
-    const created = await createDiscussion(payload);
-    // 一覧に即時反映（先頭に追加）
+    const created = await createDiscussion(payload, CURRENT_USER_ID);
+    // 一覧に先頭追加して画面に反映
     setDiscussions((prev) => [created, ...prev]);
-    // モーダルを閉じる
     setIsDiscussionComposerOpen(false);
   } catch (e) {
     console.error("Failed to create discussion", e);
-    // 必要なら alert など
   }
-};
+}
 
 
 const handleCreateOpinion = async (payload: { body: string }) => {

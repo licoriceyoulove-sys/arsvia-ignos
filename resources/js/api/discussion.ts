@@ -10,9 +10,20 @@ import type {
   VoteKind,
 } from "../types/discussion";
 
+// --------------------------------------------------
+// axios クライアント（client）を定義
+// --------------------------------------------------
+const client = axios.create({
+  baseURL: API_BASE,
+  withCredentials: true,
+  headers: {
+    "X-Requested-With": "XMLHttpRequest",
+    "Content-Type": "application/json",
+  },
+});
+
 // -----------------------------
 // APIレスポンス用の内部型
-// （snake_case → camelCase に変換用）
 // -----------------------------
 
 type DiscussionSummaryFromApi = {
@@ -108,12 +119,9 @@ const mapDetailFromApi = (d: DiscussionDetailFromApi): DiscussionDetail => ({
 export const fetchDiscussions = async (
   keyword?: string
 ): Promise<DiscussionSummary[]> => {
-  const res = await axios.get<DiscussionSummaryFromApi[]>(
-    `${API_BASE}/discussions`,
-    {
-      params: keyword ? { keyword } : undefined,
-    }
-  );
+  const res = await client.get<DiscussionSummaryFromApi[]>("/discussions", {
+    params: keyword ? { keyword } : undefined,
+  });
 
   return res.data.map(mapSummaryFromApi);
 };
@@ -121,49 +129,44 @@ export const fetchDiscussions = async (
 /**
  * 議論詳細の取得（アジェンダ＋意見一覧＋投票状況）
  * GET /api/discussions/{id}
+ *
+ * ※ QuizApp では fetchDiscussionDetail(id) の形で呼んでいるので
+ *    引数は id 1つだけにしています。
  */
-export const fetchDiscussionDetail = async (
+export async function fetchDiscussionDetail(
   id: number
-): Promise<DiscussionDetail> => {
-  const res = await axios.get<DiscussionDetailFromApi>(
-    `${API_BASE}/discussions/${id}`
-  );
-
+): Promise<DiscussionDetail> {
+  const res = await client.get<DiscussionDetailFromApi>(`/discussions/${id}`);
   return mapDetailFromApi(res.data);
-};
+}
 
 /**
  * 議題の新規作成
  * POST /api/discussions
  *
- * @param payload { title, agenda, tags }
+ * QuizApp では createDiscussion(payload) として使っているので
+ * 引数は payload 1つだけ。
+ * （誰の投稿かはサーバ側で $request->user() などで判断する想定）
  */
-export const createDiscussion = async (payload: {
-  title: string;
-  agenda: string;
-  tags: string[];
-}): Promise<DiscussionSummary> => {
-  const res = await axios.post<DiscussionSummaryFromApi>(
-    `${API_BASE}/discussions`,
-    payload
-  );
-
+export async function createDiscussion(
+  payload: { title: string; agenda: string; tags: string[] },
+): Promise<DiscussionSummary> {
+  const res = await client.post<DiscussionSummaryFromApi>("/discussions", {
+    ...payload,
+  });
   return mapSummaryFromApi(res.data);
-};
+}
 
 /**
  * 意見の新規投稿
  * POST /api/discussions/{discussionId}/opinions
- *
- * @param discussionId 対象の議題ID
- * @param payload { body }
  */
 export const createOpinion = async (
   discussionId: number,
   payload: { body: string }
 ): Promise<DiscussionOpinion> => {
-  const res = await axios.post<DiscussionOpinionFromApi>(
-    `${API_BASE}/discussions/${discussionId}/opinions`,
+  const res = await client.post<DiscussionOpinionFromApi>(
+    `/discussions/${discussionId}/opinions`,
     payload
   );
 
@@ -173,15 +176,12 @@ export const createOpinion = async (
 /**
  * 意見への投票（賛成/反対/パス）
  * POST /api/discussions/opinions/{opinionId}/vote
- *
- * 返り値は今は { ok: true } 程度なので、型は any にしておき、
- * 呼び出し側で fetchDiscussionDetail を叩き直す想定。
  */
 export const voteOpinion = async (
   opinionId: number,
   vote: VoteKind
 ): Promise<void> => {
-  await axios.post(`${API_BASE}/discussions/opinions/${opinionId}/vote`, {
+  await client.post(`/discussions/opinions/${opinionId}/vote`, {
     vote,
   });
 };
