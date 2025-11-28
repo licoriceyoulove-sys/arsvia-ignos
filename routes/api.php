@@ -634,12 +634,16 @@ Route::middleware('web')->group(function () {
     Route::get('/discussions/{discussion}', [DiscussionController::class, 'show']);
 
     // 意見投稿（POST）も CSRF 外す
-    Route::post('/discussions/{discussion}/opinions', [DiscussionOpinionController::class, 'store'])
-        ->withoutMiddleware(VerifyCsrfToken::class);
+    Route::post('/discussions/{discussion}/opinions',
+        [DiscussionOpinionController::class, 'store']
+    )->withoutMiddleware(VerifyCsrfToken::class);
 
     // 投票（POST）も CSRF 外す
-    Route::post('/discussions/opinions/{opinion}/vote', [DiscussionVoteController::class, 'store'])
-        ->withoutMiddleware(VerifyCsrfToken::class);
+Route::post(
+    '/discussions/opinions/{opinion}/vote',
+    [DiscussionVoteController::class, 'store']
+)->withoutMiddleware(VerifyCsrfToken::class);
+
 });
 
 /**

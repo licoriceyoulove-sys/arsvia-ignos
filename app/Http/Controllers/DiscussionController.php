@@ -108,84 +108,83 @@ class DiscussionController extends Controller
     }
 
     // 議題詳細（意見＋投票状況）
-    public function show(Request $request, Discussion $discussion)
-    {
-        // ★ ログインユーザーIDはクエリ ?viewer_id=1 で受け取る
-        $viewerId = (int) $request->query('viewer_id', 0);
+public function show(Request $request, Discussion $discussion)
+{
+    // ★ 修正ポイント：クエリではなくセッションからログイン中ユーザーIDを取得
+    $viewerId = (int) $request->session()->get('uid', 0);
 
-        // user, tags, opinions.user を一括ロード
-        $discussion->load(['user', 'tags', 'opinions.user']);
+    // user, tags, opinions.user を一括ロード
+    $discussion->load(['user', 'tags', 'opinions.user']);
 
-        // 意見ID一覧
-        $opinionIds = $discussion->opinions->pluck('id')->all();
+    // 意見ID一覧
+    $opinionIds = $discussion->opinions->pluck('id')->all();
 
-        // 各意見の vote 集計
-        $rawStats = DiscussionVote::query()
-            ->select('opinion_id', 'vote', DB::raw('COUNT(*) as cnt'))
+    // 各意見の vote 集計
+    $rawStats = DiscussionVote::query()
+        ->select('opinion_id', 'vote', DB::raw('COUNT(*) as cnt'))
+        ->whereIn('opinion_id', $opinionIds)
+        ->groupBy('opinion_id', 'vote')
+        ->get()
+        ->groupBy('opinion_id');
+
+    // ログインユーザーの投票（意見ごと）
+    $myVotes = [];
+    if ($viewerId > 0) {
+        $myVotes = DiscussionVote::query()
             ->whereIn('opinion_id', $opinionIds)
-            ->groupBy('opinion_id', 'vote')
-            ->get()
-            ->groupBy('opinion_id');
+            ->where('user_id', $viewerId)
+            ->pluck('vote', 'opinion_id')
+            ->toArray();
+    }
 
-        // ログインユーザーの投票（意見ごと）
-        $myVotes = [];
-        if ($viewerId) {
-            $myVotes = DiscussionVote::query()
-                ->whereIn('opinion_id', $opinionIds)
-                ->where('user_id', $viewerId)
-                ->pluck('vote', 'opinion_id')
-                ->toArray();
+    $opinions = $discussion->opinions->map(function (DiscussionOpinion $opinion) use ($rawStats, $myVotes) {
+        $statsForOpinion = $rawStats[$opinion->id] ?? collect();
+
+        $counts = [
+            'agree'    => 0,
+            'disagree' => 0,
+            'pass'     => 0,
+        ];
+
+        foreach ($statsForOpinion as $row) {
+            $vote = $row->vote;
+            if (isset($counts[$vote])) {
+                $counts[$vote] = (int) $row->cnt;
+            }
         }
 
-        $opinions = $discussion->opinions->map(function (DiscussionOpinion $opinion) use ($rawStats, $myVotes) {
-            $statsForOpinion = $rawStats[$opinion->id] ?? collect();
+        $total  = $counts['agree'] + $counts['disagree'] + $counts['pass'];
+        $myVote = $myVotes[$opinion->id] ?? null;
 
-            $counts = [
-                'agree'    => 0,
-                'disagree' => 0,
-                'pass'     => 0,
-            ];
+        // ★仕様：投票するまで投票率は伏せる
+        $visible = $myVote !== null;
 
-            foreach ($statsForOpinion as $row) {
-                $vote = $row->vote;
-                if (isset($counts[$vote])) {
-                    $counts[$vote] = (int) $row->cnt;
-                }
-            }
+        return [
+            'id'                  => $opinion->id,
+            'body'                => $opinion->body,
+            'author_display_name' => optional($opinion->user)->display_name ?? null,
+            'author_ignos_id'     => optional($opinion->user)->ignos_id ?? null,
+            'created_at'          => $opinion->created_at->toIso8601String(),
+            'stats'               => [
+                'visible'  => $visible,
+                'agree'    => $visible ? $counts['agree'] : 0,
+                'disagree' => $visible ? $counts['disagree'] : 0,
+                'pass'     => $visible ? $counts['pass'] : 0,
+                'total'    => $visible ? $total : 0,
+                'my_vote'  => $myVote,
+            ],
+        ];
+    });
 
-            $total = $counts['agree'] + $counts['disagree'] + $counts['pass'];
-
-            $myVote = $myVotes[$opinion->id] ?? null;
-
-            // ★仕様：投票するまで投票率は伏せる
-            $visible = $myVote !== null;
-
-            return [
-                'id'                  => $opinion->id,
-                'body'                => $opinion->body,
-                'author_display_name' => optional($opinion->user)->display_name ?? null,
-                'author_ignos_id'     => optional($opinion->user)->ignos_id ?? null,
-                'created_at'          => $opinion->created_at->toIso8601String(),
-                'stats'               => [
-                    'visible'  => $visible,
-                    'agree'    => $visible ? $counts['agree'] : 0,
-                    'disagree' => $visible ? $counts['disagree'] : 0,
-                    'pass'     => $visible ? $counts['pass'] : 0,
-                    'total'    => $visible ? $total : 0,
-                    'my_vote'  => $myVote,
-                ],
-            ];
-        });
-
-        return response()->json([
-            'id'                  => $discussion->id,
-            'title'               => $discussion->title,
-            'agenda'              => $discussion->agenda,
-            'tags'                => $discussion->tags->pluck('tag')->values(),
-            'author_display_name' => optional($discussion->user)->display_name ?? null,
-            'author_ignos_id'     => optional($discussion->user)->ignos_id ?? null,
-            'created_at'          => $discussion->created_at->toIso8601String(),
-            'opinions'            => $opinions,
-        ]);
-    }
+    return response()->json([
+        'id'                  => $discussion->id,
+        'title'               => $discussion->title,
+        'agenda'              => $discussion->agenda,
+        'tags'                => $discussion->tags->pluck('tag')->values(),
+        'author_display_name' => optional($discussion->user)->display_name ?? null,
+        'author_ignos_id'     => optional($discussion->user)->ignos_id ?? null,
+        'created_at'          => $discussion->created_at->toIso8601String(),
+        'opinions'            => $opinions,
+    ]);
+}
 }
