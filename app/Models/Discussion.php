@@ -29,8 +29,10 @@ class Discussion extends Model
     }
 
     // 意見一覧
-    public function opinions(): HasMany
-    {
-        return $this->hasMany(DiscussionOpinion::class);
-    }
+public function opinions(): HasMany
+{
+    // 新しいものから順に返す
+    return $this->hasMany(DiscussionOpinion::class)
+                ->orderByDesc('created_at');
+}
 }

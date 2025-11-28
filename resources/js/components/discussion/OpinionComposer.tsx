@@ -5,31 +5,31 @@ import { Modal } from "../layout/Modal";
 type Props = {
   open: boolean;
   onClose: () => void;
-  onSubmit: (payload: { body: string; choices: string[] }) => Promise<void> | void;
+  // ★ 意見本文だけ送る形に変更
+  onSubmit: (payload: { body: string }) => Promise<void> | void;
 };
 
 const OpinionComposer: React.FC<Props> = ({ open, onClose, onSubmit }) => {
   const [body, setBody] = useState("");
-  const [choices, setChoices] = useState<string[]>(["", ""]);
-
-  const updateChoice = (index: number, value: string) => {
-    setChoices((prev) => {
-      const newChoices = [...prev];
-      newChoices[index] = value;
-      return newChoices;
-    });
-  };
-
-  const addChoice = () => setChoices((prev) => [...prev, ""]);
-  const removeChoice = (index: number) =>
-    setChoices((prev) => prev.filter((_, i) => i !== index));
 
   const handleSubmit = async () => {
-    const filtered = choices.map((c) => c.trim()).filter(Boolean);
-    if (filtered.length < 2) return; // 最低2つ
-    await onSubmit({ body, choices: filtered });
+    const trimmed = body.trim();
+
+    // 入力チェック：空なら何もしない
+    if (!trimmed) {
+      alert("意見を入力してください。");
+      return;
+    }
+
+    // 投稿前の確認ダイアログ
+    const ok = window.confirm("現在の内容で投稿します。よろしいですか？");
+    if (!ok) return;
+
+    // 親コンポーネントへ送信
+    await onSubmit({ body: trimmed });
+
+    // フォームクリア
     setBody("");
-    setChoices(["", ""]);
     onClose();
   };
 
@@ -42,34 +42,11 @@ const OpinionComposer: React.FC<Props> = ({ open, onClose, onSubmit }) => {
             className="w-full border rounded px-2 py-1 text-sm min-h-[120px]"
             value={body}
             onChange={(e) => setBody(e.target.value)}
+              placeholder={`あなたの意見を書いてください。
+過激な表現や個人を特定できるような情報は含めないようご注意ください。
+投稿する前に誤字・脱字がないか、誤解を与えるような文章になっていないか確認しましょう。`
+  }
           />
-        </div>
-
-        <div className="flex flex-col gap-1">
-          <label className="text-xs text-gray-700">選択肢</label>
-          {choices.map((c, i) => (
-            <div key={i} className="flex gap-1 items-center">
-              <input
-                className="flex-1 border rounded px-2 py-1 text-sm"
-                value={c}
-                onChange={(e) => updateChoice(i, e.target.value)}
-              />
-              {choices.length > 2 && (
-                <button
-                  className="text-xs text-red-500"
-                  onClick={() => removeChoice(i)}
-                >
-                  削除
-                </button>
-              )}
-            </div>
-          ))}
-          <button
-            className="self-start text-xs text-blue-500 mt-1"
-            onClick={addChoice}
-          >
-            ＋選択肢を追加
-          </button>
         </div>
 
         <div className="flex justify-end gap-2 mt-2">
