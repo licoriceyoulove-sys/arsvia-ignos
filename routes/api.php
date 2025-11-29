@@ -300,7 +300,7 @@ Route::post('/feed', function (Request $request) {
 
 /**
  * PATCH /api/feed/{id}
- * body: { field: "likes" | "retweets" | "answers" }
+ * body: { field: "likes" | "retweets" | "answers", user_id: number }
  */
 Route::patch('/feed/{id}', function (Request $req, string $id) {
     $field = $req->input('field'); // "likes" | "retweets" | "answers"
@@ -309,53 +309,95 @@ Route::patch('/feed/{id}', function (Request $req, string $id) {
         return response()->json(['error' => 'invalid field'], 400);
     }
 
-    // フロントから送ってもらう user_id を使う
-    $userId = (int) $req->input('user_id', 0);
-    if ($userId <= 0) {
-        return response()->json(['error' => 'unauthenticated'], 401);
-    }
-
-    // ★ Answer は何回でもOK → 単純に +1
+    // Answer は誰でも何回でも OK → 従来通り feed_items.answers を +1 して終わり
     if ($field === 'answers') {
         DB::table('feed_items')
             ->where('id', $id)
             ->increment('answers', 1);
 
-        return ['ok' => true];
+        // 現在の answers を返しておくとフロントで同期しやすい
+        $answers = DB::table('feed_items')
+            ->where('id', $id)
+            ->value('answers') ?? 0;
+
+        return [
+            'ok'      => true,
+            'answers' => (int) $answers,
+        ];
     }
 
-    // ★ Thanks / Look は 1ユーザー1回
+    // Thanks / Look は 1ユーザー1回＋トグル
+    $userId = (int) $req->input('user_id', 0);
+    if ($userId <= 0) {
+        return response()->json(['error' => 'unauthenticated'], 401);
+    }
+
     $kind = $field === 'likes' ? 'like' : 'retweet';
 
     DB::beginTransaction();
     try {
-        // まだ押していなければ 1 行挿入される（既にあれば 0 行）
-        $inserted = DB::table('reactions')->insertOrIgnore([
-            'user_id'    => $userId,
-            'feed_id'    => $id,
-            'kind'       => $kind,
-            'created_at' => now(),
-        ]);
+        // すでにリアクションしているか？
+        $existing = DB::table('reactions')
+            ->where('user_id', $userId)
+            ->where('feed_id', $id)
+            ->where('kind', $kind)
+            ->first();
 
-        if ($inserted) {
-            // 初回だけ feed_items のカウントを +1
-            DB::table('feed_items')
-                ->where('id', $id)
-                ->increment($field, 1);
+        $reacted = false;
+
+        if ($existing) {
+            // ★ もう一度押された → リアクション解除（行削除）
+            DB::table('reactions')
+                ->where('user_id', $userId)
+                ->where('feed_id', $id)
+                ->where('kind', $kind)
+                ->delete();
+            $reacted = false;
+        } else {
+            // ★ 初回 → リアクション追加
+            DB::table('reactions')->insert([
+                'user_id'    => $userId,
+                'feed_id'    => $id,
+                'kind'       => $kind,
+                'created_at' => now(),
+            ]);
+            $reacted = true;
         }
+
+        // ★ 現在の likes / retweets を reactions から集計
+        $agg = DB::table('reactions')
+            ->select(
+                'feed_id',
+                DB::raw("SUM(CASE WHEN kind = 'like' THEN 1 ELSE 0 END) as likes_cnt"),
+                DB::raw("SUM(CASE WHEN kind = 'retweet' THEN 1 ELSE 0 END) as retweets_cnt")
+            )
+            ->where('feed_id', $id)
+            ->groupBy('feed_id')
+            ->first();
+
+        $likes    = $agg->likes_cnt    ?? 0;
+        $retweets = $agg->retweets_cnt ?? 0;
 
         DB::commit();
 
         return [
             'ok'       => true,
-            'inserted' => (bool) $inserted, // true = 今回が初回リアクション
+            'reacted'  => $reacted,       // true = 今回押した, false = 今回解除した
+            'likes'    => (int) $likes,   // 現在の合計
+            'retweets' => (int) $retweets,
         ];
     } catch (\Throwable $e) {
         DB::rollBack();
+        \Log::error('PATCH /feed failed', [
+            'feed_id' => $id,
+            'error'   => $e->getMessage(),
+        ]);
         return response()->json(['error' => 'server_error'], 500);
     }
 });
 
+
+// 追加：フィード一覧取得
 // 追加：フィード一覧取得
 Route::get('/feed', function () {
     $rows = DB::table('feed_items')
@@ -371,14 +413,78 @@ Route::get('/feed', function () {
             'kind'      => $r->kind,                // "quiz" / "quizBundle" / "share"
             'data'      => $data,                   // 投稿本体（クイズやシェア内容）
             'createdAt' => $r->created_at,          // フロントで Date に変換してOK
-            'likes'     => (int) $r->likes,         // ★ DBの値をそのまま返す
-            'retweets'  => (int) $r->retweets,      // ★
-            'answers'   => (int) $r->answers,       // ★
+            'likes'     => (int) $r->likes,         // DBの値をそのまま返す
+            'retweets'  => (int) $r->retweets,
+            'answers'   => (int) $r->answers,
         ];
     });
 
     return response()->json($result);
 });
+// Route::get('/feed', function (Request $request) {
+//     // ログイン中ユーザー（0なら未ログイン扱い）
+//     $viewerId = (int) $request->query('viewer_id', 0);
+
+//     // reactions から feed ごとの likes / retweets を集計
+//     $reactionAgg = DB::table('reactions')
+//         ->select(
+//             'feed_id',
+//             DB::raw("SUM(CASE WHEN kind = 'like' THEN 1 ELSE 0 END) as likes_cnt"),
+//             DB::raw("SUM(CASE WHEN kind = 'retweet' THEN 1 ELSE 0 END) as retweets_cnt")
+//         )
+//         ->groupBy('feed_id');
+
+//     // viewer が押したかどうか（1ユーザー分だけ見る）
+//     $userReactions = DB::table('reactions')
+//         ->select(
+//             'feed_id',
+//             DB::raw("MAX(CASE WHEN kind = 'like' THEN 1 ELSE 0 END) as user_liked"),
+//             DB::raw("MAX(CASE WHEN kind = 'retweet' THEN 1 ELSE 0 END) as user_retweeted")
+//         )
+//         ->where('user_id', $viewerId)
+//         ->groupBy('feed_id');
+
+//     $rows = DB::table('feed_items as f')
+//         ->leftJoinSub($reactionAgg, 'r', function ($join) {
+//             $join->on('r.feed_id', '=', 'f.id');
+//         })
+//         ->leftJoinSub($userReactions, 'ur', function ($join) {
+//             $join->on('ur.feed_id', '=', 'f.id');
+//         })
+//         ->orderBy('f.created_at', 'desc')
+//         ->get([
+//             'f.id',
+//             'f.kind',
+//             'f.data',
+//             'f.created_at',
+//             // answers は feed_items のカラムをそのまま利用
+//             'f.answers',
+//             DB::raw('COALESCE(r.likes_cnt, 0) as likes'),
+//             DB::raw('COALESCE(r.retweets_cnt, 0) as retweets'),
+//             DB::raw('COALESCE(ur.user_liked, 0) as user_liked'),
+//             DB::raw('COALESCE(ur.user_retweeted, 0) as user_retweeted'),
+//         ]);
+
+//     // DBの1行1行をフロント用の形に変換
+//     $result = $rows->map(function ($r) {
+//         $data = json_decode($r->data, true) ?: [];
+
+//         return [
+//             'id'            => $r->id,
+//             'kind'          => $r->kind,        // "quiz" / "quizBundle" / "share"
+//             'data'          => $data,           // 投稿本体
+//             'createdAt'     => $r->created_at,  // フロントで Date に変換してOK
+//             'likes'         => (int) $r->likes,
+//             'retweets'      => (int) $r->retweets,
+//             'answers'       => (int) $r->answers,
+//             'user_liked'    => (int) $r->user_liked,     // 0 or 1
+//             'user_retweeted'=> (int) $r->user_retweeted, // 0 or 1
+//         ];
+//     });
+
+//     return response()->json($result);
+// });
+
 
 
 /* ============================================================

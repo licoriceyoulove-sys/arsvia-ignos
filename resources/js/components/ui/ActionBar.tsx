@@ -7,6 +7,10 @@ type ActionBarProps = {
   answers?: number;
   onLike: () => void;
   onRT: () => void;
+
+  isLiked?: boolean;
+  isRetweeted?: boolean;
+
   onAnswer?: () => void;
 
   isMarked?: boolean;

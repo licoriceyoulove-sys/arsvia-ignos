@@ -82,5 +82,7 @@ export type FeedItem = {
   likes: number;
   retweets: number;
   answers: number;
+  isLiked?: boolean;      
+  isRetweeted?: boolean;  
   isMarked?: boolean;
 };

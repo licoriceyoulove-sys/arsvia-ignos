@@ -160,24 +160,49 @@ export async function postFeed(item: any) {
  * PATCH /feed/{id}
  * サーバ側は { field: "likes" | "retweets" | "answers" } を受け取り、そのカラムを +1 する実装想定。
  */
+// export async function patchFeed(
+//   id: string,
+//   field: "likes" | "retweets" | "answers"
+// ) {
+//   const res = await fetch(`${API_BASE}/feed/${id}`, {
+//     method: "PATCH",
+//     headers: { "Content-Type": "application/json" },
+//     credentials: "include",
+//     body: JSON.stringify({
+//       field,
+//       user_id: CURRENT_USER_ID,  // ★ ここが超重要
+//     }),
+//   });
+
+//   if (!res.ok) {
+//     console.error("patchFeed failed", await res.text());
+//     throw new Error("patchFeed failed");
+//   }
+// }
 export async function patchFeed(
   id: string,
   field: "likes" | "retweets" | "answers"
-) {
-  const res = await fetch(`${API_BASE}/feed/${id}`, {
+): Promise<
+  | { ok: true; reacted: boolean; likes: number; retweets: number }
+  | { ok: true; answers: number }
+> {
+  const res = await fetch(`${API_BASE}/feed/${encodeURIComponent(id)}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "X-Requested-With": "XMLHttpRequest",
+    },
     credentials: "include",
     body: JSON.stringify({
       field,
-      user_id: CURRENT_USER_ID,  // ★ ここが超重要
+      user_id: CURRENT_USER_ID ?? 0,
     }),
   });
 
   if (!res.ok) {
-    console.error("patchFeed failed", await res.text());
-    throw new Error("patchFeed failed");
+    throw new Error(`patchFeed failed: ${res.status}`);
   }
+  return await res.json();
 }
 
 export async function deleteQuizzes(ids: string[]): Promise<void> {

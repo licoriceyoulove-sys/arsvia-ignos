@@ -39,6 +39,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { fromQuizRow } from "./api/mapper";
 // import { bulkUpsertQuizzes, postFeed, patchFeed, API_BASE } from "./api/client";
 import {
+  getFeed,
   getQuizzes,
   getUserQuizzes,
   bulkUpsertQuizzes,
@@ -1950,6 +1951,10 @@ export default function QuizApp() {
   const [feed, setFeed] = useState<FeedItem[]>([]);
 const [globalPosts, setGlobalPosts] = useState<QuizPost[]>([]);
 
+  // ★ この端末・このセッションで「Thanks / Look を押した feed_id の一覧」
+  const [thanksFeedIds, setThanksFeedIds] = useState<string[]>([]);
+  const [retweetedFeedIds, setRetweetedFeedIds] = useState<string[]>([]);
+
 const postsForTags = useMemo(() => {
   const map = new Map<string, QuizPost>();
   posts.forEach((p) => map.set(p.id, p));
@@ -2091,21 +2096,22 @@ const handleChangeVisibility = async (v: Visibility) => {
 
 // QuizApp コンポーネント内
 
+// QuizApp コンポーネント内
 const loadQuizzesAndFeed = async () => {
   try {
     const rows = await getQuizzes(CURRENT_USER_ID);
     const apiPosts: QuizPost[] = rows.map(fromQuizRow);
 
     setPosts(apiPosts);
-const authorSummary = apiPosts.reduce<Record<number, number>>((acc, p) => {
-  const id = p.author_id ?? -1; // author_id が undefined の場合は -1 カウント
-  acc[id] = (acc[id] ?? 0) + 1;
-  return acc;
-}, {});
 
-console.log("DEBUG /quizzes author summary =", authorSummary);
+    const authorSummary = apiPosts.reduce<Record<number, number>>((acc, p) => {
+      const id = p.author_id ?? -1;
+      acc[id] = (acc[id] ?? 0) + 1;
+      return acc;
+    }, {});
+    console.log("DEBUG /quizzes author summary =", authorSummary);
 
-    // ここから feed を構築（今 useEffect に書いてあるロジックをそのまま移動）
+    // ここから feed を構築
     const byBundle = new Map<string, QuizPost[]>();
     const singles: QuizPost[] = [];
 
@@ -2159,6 +2165,79 @@ console.log("DEBUG /quizzes author summary =", authorSummary);
     console.error("API /quizzes 取得に失敗しました", e);
   }
 };
+
+
+// const loadQuizzesAndFeed = async () => {
+//   try {
+//     const rows = await getQuizzes(CURRENT_USER_ID);
+//     const apiPosts: QuizPost[] = rows.map(fromQuizRow);
+
+//     setPosts(apiPosts);
+
+//     const authorSummary = apiPosts.reduce<Record<number, number>>((acc, p) => {
+//       const id = p.author_id ?? -1;
+//       acc[id] = (acc[id] ?? 0) + 1;
+//       return acc;
+//     }, {});
+//     console.log("DEBUG /quizzes author summary =", authorSummary);
+
+//     // ★ ここから feed を構築
+//     const byBundle = new Map<string, QuizPost[]>();
+//     const singles: QuizPost[] = [];
+
+//     for (const p of apiPosts) {
+//       if (p.bundleId) {
+//         const key = p.bundleId;
+//         const list = byBundle.get(key) ?? [];
+//         list.push(p);
+//         byBundle.set(key, list);
+//       } else {
+//         singles.push(p);
+//       }
+//     }
+
+//     const feedItems: FeedItem[] = [];
+
+//     // まとめ投稿
+//     for (const [bundleId, postsInBundle] of byBundle) {
+//       if (postsInBundle.length >= 2) {
+//         postsInBundle.sort((a, b) => a.bundleOrder - b.bundleOrder);
+
+//         const createdAt = postsInBundle[0].createdAt;
+//         feedItems.push({
+//           id: `bundle_${bundleId}`,
+//           kind: "quizBundle",
+//           data: postsInBundle,
+//           createdAt,
+//           likes: 0,
+//           retweets: 0,
+//           answers: 0,
+//         });
+//       } else {
+//         singles.push(postsInBundle[0]);
+//       }
+//     }
+
+//     // 単発投稿
+//     for (const p of singles) {
+//       feedItems.push({
+//         id: p.id,
+//         kind: "quiz",
+//         data: p,
+//         createdAt: p.createdAt,
+//         likes: 0,
+//         retweets: 0,
+//         answers: 0,
+//       });
+//     }
+
+//     feedItems.sort((a, b) => b.createdAt - a.createdAt);
+//     setFeed(feedItems);
+//   } catch (e) {
+//     console.error("API /quizzes 取得に失敗しました", e);
+//   }
+// };
+
 
 // 議論API呼び出し関数
 const loadDiscussions = async () => {
@@ -2581,34 +2660,81 @@ const openEditForFeedItem = (item: FeedItem) => {
 };
 
 
-  const incLike = (id: string) => {
-    setFeed((prev) =>
-      prev.map((it) =>
-        it.id === id ? { ...it, likes: (it as any).likes + 1 } : it
-      )
-    );
-    patchFeed(id, "likes").catch(() => {}); // ← 変更
-  };
+  // ★ Thanks（いいね）：1ユーザーにつき1回だけ増える
+const incLike = (id: string) => {
+  patchFeed(id, "likes")
+    .then((res) => {
+      if (!("reacted" in res)) return; // answers 用レスポンスではない
 
-  const incRT = (id: string) => {
-    setFeed((prev) =>
-      prev.map((it) =>
-        it.id === id ? { ...it, retweets: (it as any).retweets + 1 } : it
-      )
-    );
-    patchFeed(id, "retweets").catch(() => {}); // ← 変更
-  };
+      // DB 集計結果で likes を上書き
+      setFeed((prev) =>
+        prev.map((it) =>
+          it.id === id ? { ...it, likes: res.likes } : it
+        )
+      );
 
-  const incAnswer = (id: string) => {
-    setFeed((prev) =>
-      prev.map((it) =>
-        (it.kind === "quiz" || it.kind === "quizBundle") && it.id === id
-          ? { ...it, answers: (it as any).answers + 1 }
-          : it
-      )
-    );
-    patchFeed(id, "answers").catch(() => {}); // ← 変更
-  };
+      // 押した / 解除 の状態をローカルにも反映
+      setThanksFeedIds((prev) => {
+        if (res.reacted) {
+          // 今回「押した」→リストに追加
+          if (prev.includes(id)) return prev;
+          return [...prev, id];
+        } else {
+          // 今回「解除」→リストから削除
+          return prev.filter((x) => x !== id);
+        }
+      });
+    })
+    .catch((e) => {
+      console.error("incLike failed", e);
+    });
+};
+
+
+  // ★ Look（RT）：1ユーザーにつき1回だけ増える
+const incRT = (id: string) => {
+  patchFeed(id, "retweets")
+    .then((res) => {
+      if (!("reacted" in res)) return;
+
+      setFeed((prev) =>
+        prev.map((it) =>
+          it.id === id ? { ...it, retweets: res.retweets } : it
+        )
+      );
+
+      setRetweetedFeedIds((prev) => {
+        if (res.reacted) {
+          if (prev.includes(id)) return prev;
+          return [...prev, id];
+        } else {
+          return prev.filter((x) => x !== id);
+        }
+      });
+    })
+    .catch((e) => {
+      console.error("incRT failed", e);
+    });
+};
+
+
+
+const incAnswer = (id: string) => {
+  patchFeed(id, "answers")
+    .then((res) => {
+      if (!("answers" in res)) return;
+
+      setFeed((prev) =>
+        prev.map((it) =>
+          it.id === id ? { ...it, answers: res.answers } : it
+        )
+      );
+    })
+    .catch((e) => {
+      console.error("incAnswer failed", e);
+    });
+};
+
 
   const toggleMark = (feedId: string) => {
   setFeed((prev) =>
@@ -2663,6 +2789,8 @@ const openEditForFeedItem = (item: FeedItem) => {
     }}
     onLike={() => incLike(item.id)}
     onRT={() => incRT(item.id)}
+    isLiked={thanksFeedIds.includes(item.id)}
+    isRetweeted={retweetedFeedIds.includes(item.id)}
     onToggleMark={() => toggleMark(item.id)}
     isMine={item.data.author_id === CURRENT_USER_ID}
     onEdit={

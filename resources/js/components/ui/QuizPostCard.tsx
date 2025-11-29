@@ -40,6 +40,9 @@ type QuizPostCardProps = {
   onRT?: () => void;
   onToggleMark?: () => void;
 
+  isLiked?: boolean;
+  isRetweeted?: boolean;
+
   // 編集 & プロフィール遷移
   isMine?: boolean;
   onEdit?: () => void;
@@ -64,6 +67,8 @@ export const QuizPostCard: React.FC<QuizPostCardProps> = ({
   onLike,
   onRT,
   onToggleMark,
+  isLiked,       
+  isRetweeted,   
   isMine,
   onEdit,
   onOpenProfile,
@@ -175,6 +180,10 @@ return (
       isMine={isMine}
       onEdit={onEdit}
       createdAtText={createdAtText}
+
+      isLiked={isLiked}
+      isRetweeted={isRetweeted}
+
     />
   </div>
 );
