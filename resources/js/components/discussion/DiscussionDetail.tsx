@@ -76,8 +76,6 @@ const DiscussionDetailView: React.FC<Props> = ({
           </div>
         )}
       </div>
-
-      {/* 右下ボタンは QuizApp 側で「意見投稿」ボタンに切り替える */}
     </div>
   );
 };
@@ -91,7 +89,7 @@ type OpinionCardProps = {
 const OpinionCard: React.FC<OpinionCardProps> = ({ opinion, onVote }) => {
   const { visible, agree, disagree, pass, total, myVote } = opinion.stats;
 
-  // 合計100%になるようにパーセント計算
+  // ===== パーセント計算（合計100%に調整） =====
   const rawAgree = total > 0 ? (agree / total) * 100 : 0;
   const rawNeutral = total > 0 ? (pass / total) * 100 : 0;
 
@@ -107,7 +105,7 @@ const OpinionCard: React.FC<OpinionCardProps> = ({ opinion, onVote }) => {
 
   const hasVoted = myVote !== null;
 
-  // 投票の確認モーダル
+  // 投票確認モーダル
   const [pendingVote, setPendingVote] = useState<VoteKind | null>(null);
 
   // 棒グラフのフェードイン＋左右から伸びるアニメーション用
@@ -115,18 +113,26 @@ const OpinionCard: React.FC<OpinionCardProps> = ({ opinion, onVote }) => {
   // ラベルを少し遅れて表示する用
   const [labelsVisible, setLabelsVisible] = useState(false);
 
-  useEffect(() => {
-    if (visible) {
-      setShowResults(true);
-      const id = window.setTimeout(() => {
-        setLabelsVisible(true);
-      }, 700); // duration-700 と合わせる
-      return () => window.clearTimeout(id);
-    } else {
-      setShowResults(false);
-      setLabelsVisible(false);
-    }
-  }, [visible]);
+useEffect(() => {
+  if (visible) {
+    // ★ アニメーション開始時は必ず非表示スタートにする
+    setShowResults(true);
+    setLabelsVisible(false);
+
+    const id = window.setTimeout(() => {
+      setLabelsVisible(true);
+    }, 700); // 棒グラフの duration-700 に合わせる
+
+    return () => window.clearTimeout(id);
+  } else {
+    setShowResults(false);
+    setLabelsVisible(false);
+  }
+}, [visible]);
+
+
+  // 無関心ラベルの中心位置（賛成領域の外＝「無関心の中心」に来るように）
+  const neutralCenter = agreePercent + neutralPercent / 2;
 
   return (
     <Card className="flex flex-col gap-3">
@@ -170,7 +176,7 @@ const OpinionCard: React.FC<OpinionCardProps> = ({ opinion, onVote }) => {
         <>
           <div
             className={`
-              relative w-full h-6 rounded-full bg-gray-300 overflow-hidden
+              relative w-full h-6 rounded-full bg-gray-500 overflow-hidden
               transition-opacity duration-500
               ${showResults ? "opacity-100" : "opacity-0"}
             `}
@@ -199,62 +205,70 @@ const OpinionCard: React.FC<OpinionCardProps> = ({ opinion, onVote }) => {
               }}
             />
 
-            {/* ラベル（棒の上に重ねて表示） */}
-            <div
-              className={`
-                relative z-10 flex items-center justify-between h-full px-1 pointer-events-none
-                transition-opacity duration-500
-                ${labelsVisible ? "opacity-100" : "opacity-0"}
-              `}
-            >
-              {/* 左：賛成ラベル */}
-              {agreePercent > 0 && (
-                <span
-                  className={`
-                    px-1 whitespace-nowrap text-white
-                    ${
-                      myVote === "agree"
-                        ? "text-[13px] font-bold"
-                        : "text-[11px]"
-                    }
-                  `}
-                >
-                  賛成 {agreePercent}%
-                </span>
-              )}
+            {/* ラベルたち（棒の上に絶対配置） */}
+            {/* 賛成ラベル（左端付近） */}
+            {visible && agreePercent > 0 && (
+  <span
+    className={`
+      absolute left-1 top-1/2 -translate-y-1/2
+      px-1 whitespace-nowrap text-white
+      transition-opacity duration-300
+      ${labelsVisible ? "opacity-100" : "opacity-0"}
+      ${
+        myVote === "agree"
+          ? "text-[13px] font-bold"
+          : "text-[11px]"
+      }
+    `}
+  >
+    賛成 {agreePercent}%
+  </span>
+)}
 
-              {/* 中央：無関心ラベル */}
-              {neutralPercent > 0 && (
-                <span
-                  className={`
-                    px-1 whitespace-nowrap mx-auto text-white
-                    ${
-                      myVote === "pass"
-                        ? "text-[13px] font-bold"
-                        : "text-[11px]"
-                    }
-                  `}
-                >
-                  無関心 {neutralPercent}%
-                </span>
-              )}
 
-              {/* 右：反対ラベル */}
-              {disagreePercent > 0 && (
-                <span
-                  className={`
-                    px-1 whitespace-nowrap ml-auto text-white
-                    ${
-                      myVote === "disagree"
-                        ? "text-[13px] font-bold"
-                        : "text-[11px]"
-                    }
-                  `}
-                >
-                  反対 {disagreePercent}%
-                </span>
-              )}
-            </div>
+            {/* 無関心ラベル（無関心の中心位置） */}
+{visible && neutralPercent > 0 && (
+  <span
+    className={`
+      absolute top-1/2 -translate-x-1/2 -translate-y-1/2
+      px-1 whitespace-nowrap text-gray-50
+      transition-opacity duration-300
+      ${labelsVisible ? "opacity-100" : "opacity-0"}
+      ${
+        myVote === "pass"
+          ? "text-[13px] font-bold"
+          : "text-[11px]"
+      }
+    `}
+    style={{
+      left: `${neutralCenter}%`,
+    }}
+  >
+    無関心 {neutralPercent}%
+  </span>
+)}
+
+
+
+            {/* 反対ラベル（右端付近） */}
+{visible && disagreePercent > 0 && (
+  <span
+    className={`
+      absolute right-1 top-1/2 -translate-y-1/2
+      px-1 whitespace-nowrap text-white
+      transition-opacity duration-300
+      ${labelsVisible ? "opacity-100" : "opacity-0"}
+      ${
+        myVote === "disagree"
+          ? "text-[13px] font-bold"
+          : "text-[11px]"
+      }
+    `}
+  >
+    反対 {disagreePercent}%
+  </span>
+)}
+
           </div>
 
           {/* 投票数の補足 */}
