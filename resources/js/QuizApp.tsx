@@ -62,7 +62,8 @@ import { ShareDialog } from "./components/home/ShareDialog";
 import { FabPostButton } from "./components/home/FabPostButton";
 import { Sidebar } from "./components/layout/Sidebar";
 import { ToolsPalette } from "./components/layout/ToolsPalette";
-
+import { UserSearchScreen } from "./components/search/UserSearchScreen";
+import { NotificationsScreen } from "./components/notifications/NotificationsScreen";
 
 import type {
     UserSearchResult,
@@ -1282,91 +1283,26 @@ export default function QuizApp() {
                     />
                 )}
 
-                {/* SEARCH：ユーザー検索 */}
-                {mode === "search" && (
-                    <Card>
-                        <SectionTitle title="ユーザー検索" />
-                        <div className="px-4 pb-4 space-y-3">
-                            {/* 検索フォーム */}
-                            <div className="flex gap-2">
-                                <input
-                                    type="text"
-                                    value={userKeyword}
-                                    onChange={(e) =>
-                                        setUserKeyword(e.target.value)
-                                    }
-                                    placeholder="ユーザー名 / IgnosID を検索"
-                                    className="flex-1 px-3 py-2 border rounded-xl text-sm bg-gray-50 border-gray-200"
-                                />
-                                <button
-                                    type="button"
-                                    onClick={handleUserSearch}
-                                    className="px-4 py-2 rounded-xl bg-black text-white text-sm font-bold"
-                                >
-                                    検索
-                                </button>
-                            </div>
+{/* SEARCH：ユーザー検索 */}
+{mode === "search" && (
+  <UserSearchScreen
+    keyword={userKeyword}
+    onChangeKeyword={setUserKeyword}
+    searching={userSearching}
+    error={userSearchError}
+    results={userResults}
+    onSearch={handleUserSearch}
+    onSelectUser={(id) => {
+      // async 関数でもここでラップしておけば OK
+      void openProfile(id);
+    }}
+  />
+)}
 
-                            {userSearchError && (
-                                <div className="text-xs text-red-500">
-                                    {userSearchError}
-                                </div>
-                            )}
 
-                            {userSearching && (
-                                <div className="text-sm text-gray-500">
-                                    検索中です…
-                                </div>
-                            )}
+{/* NOTIFICATIONS */}
+{mode === "notifications" && <NotificationsScreen />}
 
-                            {/* 検索結果リスト */}
-                            <div className="divide-y divide-gray-200">
-                                {userResults.map((u) => {
-                                    const displayName =
-                                        u.display_name || "ゲスト";
-                                    const ignosId = u.ignos_id || String(u.id);
-
-                                    return (
-                                        <button
-                                            key={u.id}
-                                            type="button"
-                                            onClick={() => openProfile(u.id)}
-                                            className="w-full flex items-center gap-3 py-3 text-left"
-                                        >
-                                            <div className="w-9 h-9 rounded-full bg-gray-300" />
-                                            <div className="flex flex-col items-start">
-                                                <span className="text-sm font-bold">
-                                                    {displayName}
-                                                </span>
-                                                <span className="text-xs text-gray-500">
-                                                    @{ignosId}
-                                                </span>
-                                            </div>
-                                        </button>
-                                    );
-                                })}
-
-                                {!userSearching &&
-                                    userKeyword.trim() !== "" &&
-                                    userResults.length === 0 && (
-                                        <div className="py-3 text-sm text-gray-500">
-                                            該当するユーザーが見つかりませんでした。
-                                        </div>
-                                    )}
-                            </div>
-                        </div>
-                    </Card>
-                )}
-
-                {/* NOTIFICATIONS（プレースホルダー） */}
-                {mode === "notifications" && (
-                    <Card>
-                        <SectionTitle title="通知" />
-                        <div className="px-4 pb-4 text-sm text-gray-600">
-                            共有やいいね・RTの通知をここに表示できます。
-                        </div>
-                    </Card>
-                )}
 
                 {/* PROFILE */}
                 {mode === "profile" && profileUserId !== null && (
