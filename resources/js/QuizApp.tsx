@@ -38,21 +38,16 @@ import React, { useEffect, useMemo, useState } from "react";
 import { fromQuizRow } from "./api/mapper";
 // import { bulkUpsertQuizzes, postFeed, patchFeed, API_BASE } from "./api/client";
 import {
-    getFeed,
-    getQuizzes,
-    getUserQuizzes,
-    bulkUpsertQuizzes,
-    postFeed,
-    patchFeed,
-    API_BASE,
-    searchUsers,
-    deleteQuizzes, // ★追加
-    getCategoryLarges,
-    getCategoryMiddles,
-    getCategorySmalls,
-    getGlobalQuizzes,
-    updateQuizVisibility,
+  getUserQuizzes,
+  bulkUpsertQuizzes,
+  postFeed,
+  patchFeed,
+  API_BASE,
+  searchUsers,
+  deleteQuizzes,
+  updateQuizVisibility,
 } from "./api/client";
+
 import { FolderList } from "./components/folders/FolderList";
 import { QuizRunner, AnswerRunner } from "./components/quiz/QuizRunner";
 import { Composer } from "./components/composer/Composer";
@@ -65,6 +60,9 @@ import { ToolsPalette } from "./components/layout/ToolsPalette";
 import { UserSearchScreen } from "./components/search/UserSearchScreen";
 import { NotificationsScreen } from "./components/notifications/NotificationsScreen";
 import { HomeFeedScreen } from "./components/home/HomeFeedScreen";
+
+import { useFeed } from "./hooks/useFeed";
+import { useCategories } from "./hooks/useCategories";
 
 import type {
     UserSearchResult,
@@ -197,9 +195,19 @@ const pickRandom10 = (pool: QuizPost[]): PreparedQuestion[] => {
    メインアプリ
 ========================= */
 export default function QuizApp() {
-    const [posts, setPosts] = useState<QuizPost[]>([]);
-    const [feed, setFeed] = useState<FeedItem[]>([]);
-    const [globalPosts, setGlobalPosts] = useState<QuizPost[]>([]);
+    // const [posts, setPosts] = useState<QuizPost[]>([]);
+    // const [feed, setFeed] = useState<FeedItem[]>([]);
+    // const [globalPosts, setGlobalPosts] = useState<QuizPost[]>([]);
+
+      const {
+    posts,
+    setPosts,
+    feed,
+    setFeed,
+    globalPosts,
+    setGlobalPosts,
+    reloadFeed,
+  } = useFeed(CURRENT_USER_ID);
 
     // ★ この端末・このセッションで「Thanks / Look を押した feed_id の一覧」
     const [thanksFeedIds, setThanksFeedIds] = useState<string[]>([]);
@@ -257,11 +265,17 @@ export default function QuizApp() {
     const [profileFollowerCount, setProfileFollowerCount] = useState(0);
     const [profileIsFollowing, setProfileIsFollowing] = useState(false);
 
-    const [categoryLarges, setCategoryLarges] = useState<CategoryLarge[]>([]);
-    const [categoryMiddles, setCategoryMiddles] = useState<CategoryMiddle[]>(
-        []
-    );
-    const [categorySmalls, setCategorySmalls] = useState<CategorySmall[]>([]);
+    // const [categoryLarges, setCategoryLarges] = useState<CategoryLarge[]>([]);
+    // const [categoryMiddles, setCategoryMiddles] = useState<CategoryMiddle[]>(
+    //     []
+    // );
+    // const [categorySmalls, setCategorySmalls] = useState<CategorySmall[]>([]);
+
+    const {
+  categoryLarges,
+  categoryMiddles,
+  categorySmalls,
+} = useCategories();
 
     const [isSidebarOpen, setSidebarOpen] = useState(false);
     const [isToolsOpen, setToolsOpen] = useState(false);
@@ -353,81 +367,6 @@ export default function QuizApp() {
         }
     };
 
-    // QuizApp コンポーネント内
-
-    // QuizApp コンポーネント内
-    const loadQuizzesAndFeed = async () => {
-        try {
-            const rows = await getQuizzes(CURRENT_USER_ID);
-            const apiPosts: QuizPost[] = rows.map(fromQuizRow);
-
-            setPosts(apiPosts);
-
-            const authorSummary = apiPosts.reduce<Record<number, number>>(
-                (acc, p) => {
-                    const id = p.author_id ?? -1;
-                    acc[id] = (acc[id] ?? 0) + 1;
-                    return acc;
-                },
-                {}
-            );
-            console.log("DEBUG /quizzes author summary =", authorSummary);
-
-            // ここから feed を構築
-            const byBundle = new Map<string, QuizPost[]>();
-            const singles: QuizPost[] = [];
-
-            for (const p of apiPosts) {
-                if (p.bundleId) {
-                    const key = p.bundleId;
-                    const list = byBundle.get(key) ?? [];
-                    list.push(p);
-                    byBundle.set(key, list);
-                } else {
-                    singles.push(p);
-                }
-            }
-
-            const feedItems: FeedItem[] = [];
-
-            for (const [bundleId, postsInBundle] of byBundle) {
-                if (postsInBundle.length >= 2) {
-                    postsInBundle.sort((a, b) => a.bundleOrder - b.bundleOrder);
-
-                    const createdAt = postsInBundle[0].createdAt;
-                    feedItems.push({
-                        id: `bundle_${bundleId}`,
-                        kind: "quizBundle",
-                        data: postsInBundle,
-                        createdAt,
-                        likes: 0,
-                        retweets: 0,
-                        answers: 0,
-                    });
-                } else {
-                    singles.push(postsInBundle[0]);
-                }
-            }
-
-            for (const p of singles) {
-                feedItems.push({
-                    id: p.id,
-                    kind: "quiz",
-                    data: p,
-                    createdAt: p.createdAt,
-                    likes: 0,
-                    retweets: 0,
-                    answers: 0,
-                });
-            }
-
-            feedItems.sort((a, b) => b.createdAt - a.createdAt);
-            setFeed(feedItems);
-        } catch (e) {
-            console.error("API /quizzes 取得に失敗しました", e);
-        }
-    };
-
     // 議論API呼び出し関数
     const loadDiscussions = async () => {
         const list = await fetchDiscussions(discussionKeyword || undefined);
@@ -501,60 +440,6 @@ export default function QuizApp() {
                 console.error("follows fetch failed", e);
             }
         })();
-    }, []);
-
-    useEffect(() => {
-        loadQuizzesAndFeed();
-    }, []);
-
-    useEffect(() => {
-        const loadGlobalQuizzes = async () => {
-            try {
-                const rows = await getGlobalQuizzes();
-                const apiPosts = rows.map(fromQuizRow);
-                setGlobalPosts(apiPosts);
-            } catch (e) {
-                console.error("API /quizzes/global 取得に失敗しました", e);
-            }
-        };
-
-        loadGlobalQuizzes();
-    }, []);
-
-    // 一定時間ごとに最新投稿を取得（例：60秒）
-    useEffect(() => {
-        if (!CURRENT_USER_ID) return; // 未ログインなら何もしない
-
-        const intervalId = window.setInterval(() => {
-            // ここでは単純に全体を再ロード
-            loadQuizzesAndFeed();
-        }, 30_000); // 30秒ごと
-
-        return () => {
-            window.clearInterval(intervalId);
-        };
-    }, []);
-
-    useEffect(() => {
-        const fetchCategories = async () => {
-            try {
-                const [larges, middles, smalls] = await Promise.all([
-                    getCategoryLarges(),
-                    getCategoryMiddles(),
-                    getCategorySmalls(), // ★ 追加
-                ]);
-                setCategoryLarges(larges);
-                setCategoryMiddles(middles);
-                setCategorySmalls(smalls); // ★ 追加
-                console.log("DEBUG categoryLarges =", larges);
-                console.log("DEBUG categoryMiddles =", middles);
-                console.log("DEBUG categorySmalls =", smalls);
-            } catch (e) {
-                console.error("カテゴリ取得に失敗しました", e);
-            }
-        };
-
-        fetchCategories();
     }, []);
 
     const startQuiz = (tag: string) => {
