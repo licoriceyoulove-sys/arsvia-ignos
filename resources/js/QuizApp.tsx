@@ -64,6 +64,7 @@ import { Sidebar } from "./components/layout/Sidebar";
 import { ToolsPalette } from "./components/layout/ToolsPalette";
 import { UserSearchScreen } from "./components/search/UserSearchScreen";
 import { NotificationsScreen } from "./components/notifications/NotificationsScreen";
+import { HomeFeedScreen } from "./components/home/HomeFeedScreen";
 
 import type {
     UserSearchResult,
@@ -127,15 +128,6 @@ import { VisibilityIcon } from "./components/ui/VisibilityIcon";
 // ★ フォロー中ユーザーID一覧
 
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
-
-// 日付フォーマット用ユーティリティ
-const formatDateYMD = (ts: number) => {
-    const d = new Date(ts);
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${y}/${m}/${day}`;
-};
 
 /* =========================
    カテゴリJSON自動読み込み
@@ -938,290 +930,38 @@ export default function QuizApp() {
             <div className="max-w-md mx-auto">
                 {/* HOME */}
                 {mode === "home" && (
-                    <Card>
-                        {/* ホーム */}
-                        <SectionTitle title="" />
-                        <div className="px-4 pb-4">
-                            {visibleFeed.length === 0 && (
-                                <div className="text-gray-500 text-sm">
-                                    まだ投稿がありません。「投稿」から作成してみましょう。
-                                </div>
-                            )}
-                            {visibleFeed.map((item) => (
-                                <div
-                                    key={item.id}
-                                    className="py-1 border-b border-gray-200 last:border-b-0"
-                                >
-                                    {item.kind === "quiz" ? (
-                                        <QuizPostCard
-                                            post={item.data}
-                                            feedId={item.id}
-                                            likes={item.likes}
-                                            retweets={item.retweets}
-                                            answers={item.answers}
-                                            isMarked={
-                                                (item as any).isMarked ?? false
-                                            }
-                                            createdAtOverride={item.createdAt}
-                                            onAnswer={() => {
-                                                incAnswer(item.id);
-                                                setAnswerPool([item.data]);
-                                                setMode("answer");
-                                            }}
-                                            onLike={() => incLike(item.id)}
-                                            onRT={() => incRT(item.id)}
-                                            isLiked={thanksFeedIds.includes(
-                                                item.id
-                                            )}
-                                            isRetweeted={retweetedFeedIds.includes(
-                                                item.id
-                                            )}
-                                            onToggleMark={() =>
-                                                toggleMark(item.id)
-                                            }
-                                            isMine={
-                                                item.data.author_id ===
-                                                CURRENT_USER_ID
-                                            }
-                                            onEdit={
-                                                item.data.author_id ===
-                                                CURRENT_USER_ID
-                                                    ? () =>
-                                                          openEditForFeedItem(
-                                                              item
-                                                          )
-                                                    : undefined
-                                            }
-                                            onOpenProfile={(authorId) =>
-                                                openProfile(authorId as number)
-                                            }
-                                            onTagClick={(tag) => startQuiz(tag)}
-                                            visibility={item.data.visibility}
-                                            onClickVisibility={() =>
-                                                openVisibilityModal(
-                                                    item.data.id,
-                                                    item.data.visibility
-                                                )
-                                            }
-                                        />
-                                    ) : item.kind === "quizBundle" ? (
-                                        (() => {
-                                            const first = item.data[0];
+  <HomeFeedScreen
+    feed={visibleFeed}
+    currentUserId={CURRENT_USER_ID}
+    thanksFeedIds={thanksFeedIds}
+    retweetedFeedIds={retweetedFeedIds}
+    onAnswerSingle={(post, feedId) => {
+      incAnswer(feedId);
+      setAnswerPool([post]);
+      setMode("answer");
+    }}
+    onAnswerBundle={(posts, feedId) => {
+      incAnswer(feedId);
+      setAnswerPool(posts);
+      setMode("answer");
+    }}
+    onLike={incLike}
+    onRT={incRT}
+    onToggleMark={toggleMark}
+    onEditFeedItem={openEditForFeedItem}
+    onOpenProfile={(userId) => {
+      // HomeFeedScreen から来る userId は number | null | undefined
+      if (userId) {
+        void openProfile(userId);
+      }
+    }}
+    onTagClick={startQuiz}
+    onClickVisibility={(quizId, visibility) =>
+      openVisibilityModal(quizId, visibility)
+    }
+  />
+)}
 
-                                            const displayName = pickDisplayName(
-                                                first?.authorDisplayName,
-                                                first?.author_id
-                                            );
-
-                                            const ignosId =
-                                                first?.authorIgnosId ??
-                                                (first?.author_id ===
-                                                    CURRENT_USER_ID &&
-                                                    getCurrentUserIgnosId()) ??
-                                                (first?.author_id
-                                                    ? String(first.author_id)
-                                                    : "guest");
-
-                                            // このまとめ投稿に含まれるタグをすべて集約（重複削除）
-                                            const bundleTags = Array.from(
-                                                new Set(
-                                                    item.data.flatMap(
-                                                        (q) => q.hashtags ?? []
-                                                    )
-                                                )
-                                            );
-                                            const mainBundleTag = bundleTags[0];
-                                            const hasMoreBundleTags =
-                                                bundleTags.length > 1;
-
-                                            // 先頭タグからまとめタイトルを作る（なければ1問目）
-                                            const mainTag =
-                                                first?.hashtags?.[0];
-                                            const bundleTitle =
-                                                mainTag != null &&
-                                                mainTag !== ""
-                                                    ? `${mainTag}に関する問題`
-                                                    : first?.question ??
-                                                      "クイズ（複数）";
-
-                                            // 回答開始ハンドラ
-                                            const handleAnswer = () => {
-                                                incAnswer(item.id);
-                                                setAnswerPool(item.data);
-                                                setMode("answer");
-                                            };
-
-                                            return (
-                                                <>
-                                                    {/* ▼ ヘッダー行：ユーザー情報のみ */}
-                                                    <div className="flex items-start justify-between gap-2 mb-1">
-                                                        {/* 先頭問題のユーザー行 */}
-                                                        <button
-                                                            type="button"
-                                                            onClick={() =>
-                                                                openProfile(
-                                                                    first?.author_id
-                                                                )
-                                                            }
-                                                            className="flex items-center gap-2"
-                                                        >
-                                                            <div className="w-9 h-9 rounded-full bg-gray-300" />
-                                                            <div className="flex flex-col items-start">
-                                                                <span className="text-sm font-bold">
-                                                                    {
-                                                                        displayName
-                                                                    }
-                                                                </span>
-                                                                <span className="text-xs text-gray-500">
-                                                                    @{ignosId}
-                                                                </span>
-                                                            </div>
-                                                        </button>
-                                                    </div>
-
-                                                    {/* ▼ タグ + 公開範囲アイコン行 */}
-                                                    {(mainBundleTag ||
-                                                        first?.visibility !=
-                                                            null) && (
-                                                        <div className="flex items-center justify-between mb-2">
-                                                            {/* 左：代表タグ＋「…」 */}
-                                                            <div className="flex items-center gap-1 max-w-[70%] overflow-hidden whitespace-nowrap">
-                                                                {mainBundleTag && (
-                                                                    <TagChip
-                                                                        key={
-                                                                            mainBundleTag +
-                                                                            item.id
-                                                                        }
-                                                                        tag={
-                                                                            mainBundleTag
-                                                                        }
-                                                                        onClick={() =>
-                                                                            startQuiz(
-                                                                                mainBundleTag
-                                                                            )
-                                                                        }
-                                                                    />
-                                                                )}
-                                                                {hasMoreBundleTags && (
-                                                                    <span className="text-xs text-gray-500 align-middle">
-                                                                        …
-                                                                    </span>
-                                                                )}
-                                                            </div>
-
-                                                            {/* 右：公開範囲アイコン（先頭問題の visibility を代表として使用） */}
-                                                            <button
-                                                                type="button"
-                                                                className="ml-2 flex-shrink-0"
-                                                                onClick={(
-                                                                    e
-                                                                ) => {
-                                                                    e.stopPropagation();
-                                                                    if (!first)
-                                                                        return;
-                                                                    // ★ QuizApp 内で定義した openVisibilityModal を呼ぶ
-                                                                    openVisibilityModal(
-                                                                        first.id,
-                                                                        first.visibility
-                                                                    );
-                                                                }}
-                                                            >
-                                                                <VisibilityIcon
-                                                                    value={
-                                                                        first.visibility ??
-                                                                        null
-                                                                    }
-                                                                />
-                                                            </button>
-                                                        </div>
-                                                    )}
-
-                                                    {/* ▼ タイトル部分：タップで回答開始（この下は今のままでOK） */}
-                                                    <div
-                                                        className="text-[15px] whitespace-pre-wrap mb-2 cursor-pointer"
-                                                        onClick={handleAnswer}
-                                                    >
-                                                        {bundleTitle}
-                                                    </div>
-                                                    <div
-                                                        className="text-xs text-gray-500 mb-2 cursor-pointer"
-                                                        onClick={handleAnswer}
-                                                    >
-                                                        全{item.data.length}問
-                                                    </div>
-
-                                                    <ActionBar
-                                                        likes={item.likes}
-                                                        retweets={item.retweets}
-                                                        answers={item.answers}
-                                                        onLike={() =>
-                                                            incLike(item.id)
-                                                        }
-                                                        onRT={() =>
-                                                            incRT(item.id)
-                                                        }
-                                                        onAnswer={handleAnswer}
-                                                        isMarked={
-                                                            item.isMarked ??
-                                                            false
-                                                        }
-                                                        onToggleMark={() =>
-                                                            toggleMark(item.id)
-                                                        }
-                                                        isMine={
-                                                            first?.author_id ===
-                                                            CURRENT_USER_ID
-                                                        }
-                                                        onEdit={
-                                                            first?.author_id ===
-                                                            CURRENT_USER_ID
-                                                                ? () =>
-                                                                      openEditForFeedItem(
-                                                                          item
-                                                                      )
-                                                                : undefined
-                                                        }
-                                                        createdAtText={formatDateYMD(
-                                                            item.createdAt
-                                                        )}
-                                                    />
-                                                </>
-                                            );
-                                        })()
-                                    ) : (
-                                        <>
-                                            <div className="text-[15px] whitespace-pre-wrap mb-2">
-                                                {item.message}
-                                            </div>
-                                            <div className="mb-2">
-                                                <button
-                                                    onClick={() =>
-                                                        startQuiz(item.tag)
-                                                    }
-                                                    className="px-3 py-1 rounded-full bg-black text-white text-sm"
-                                                >
-                                                    クイズリンクを開く
-                                                </button>
-                                            </div>
-                                            <div className="text-xs text-gray-500">
-                                                {new Date(
-                                                    item.createdAt
-                                                ).toLocaleString()}{" "}
-                                                ・ 共有
-                                            </div>
-                                            <ActionBar
-                                                likes={item.likes}
-                                                retweets={item.retweets}
-                                                onLike={() => incLike(item.id)}
-                                                onRT={() => incRT(item.id)}
-                                            />
-                                        </>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    </Card>
-                )}
 
                 {/* FOLDERS */}
                 {mode === "folders" && (
