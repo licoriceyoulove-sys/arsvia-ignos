@@ -4,7 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-// use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Auth;
 
 
 use App\Http\Controllers\DiscussionController;
@@ -92,8 +92,8 @@ Route::post('/quizzes/bulk-delete', function (Request $request) {
  * ついでに users.display_name を author_display_name として返す
  */
 Route::get('/quizzes', function (Request $request) {
-    $viewerId = (int) $request->query('viewer_id', 0);
-
+    // $viewerId = (int) $request->query('viewer_id', 0);
+    $viewerId = Auth::id() ?? 0;
     $query = DB::table('quizzes')
         ->leftJoin('users', 'quizzes.author_id', '=', 'users.id')
         ->select(
@@ -151,7 +151,16 @@ Route::post('/quizzes/bulk', function (Request $request) {
         ], 422);
     }
 
-    DB::transaction(function () use ($rows) {
+    // ★ ログイン中ユーザーを「投稿者」として固定
+    $authorId = Auth::id();
+    if (!$authorId) {
+        return response()->json([
+            'ok' => false,
+            'message' => 'ログインが必要です',
+        ], 401);
+    }
+
+    DB::transaction(function () use ($rows, $authorId) {
         foreach ($rows as $row) {
             $id           = $row['id'] ?? (string) Str::uuid();
             $question     = $row['question'] ?? '';
@@ -162,7 +171,7 @@ Route::post('/quizzes/bulk', function (Request $request) {
             $note         = $row['note'] ?? null;
             $hashtags     = $row['hashtags'] ?? [];
             $visibility   = $row['visibility'] ?? 1;
-            $authorId     = $row['author_id'] ?? null;
+            // $authorId     = $row['author_id'] ?? null;
 
             // ★ ここを追加：フロントから送られてくる bundle_id / bundle_order を拾う
             $bundleId     = $row['bundle_id'] ?? null;
@@ -273,13 +282,19 @@ Route::get('/quizzes/global', function (Request $request) {
 Route::post('/feed', function (Request $request) {
     $body = $request->json()->all();
 
+        // ★ ログイン中ユーザーを投稿者として固定
+    $authorId = Auth::id();
+    if (!$authorId) {
+        return response()->json(['error' => 'unauthenticated'], 401);
+    }
+
     $id = $body['id'] ?? (string) Str::uuid();
     $kind = $body['kind'] ?? 'quiz';
     $data = $body['data'] ?? [];
     $likes = $body['likes'] ?? 0;
     $retweets = $body['retweets'] ?? 0;
     $answers = $body['answers'] ?? 0;
-    $authorId  = $body['author_id']  ?? null;
+    // $authorId  = $body['author_id']  ?? null;
     $createdAt = now();
 
     DB::table('feed_items')->updateOrInsert(
@@ -327,11 +342,14 @@ Route::patch('/feed/{id}', function (Request $req, string $id) {
     }
 
     // Thanks / Look は 1ユーザー1回＋トグル
-    $userId = (int) $req->input('user_id', 0);
-    if ($userId <= 0) {
+    // $userId = (int) $req->input('user_id', 0);
+    // if ($userId <= 0) {
+    //     return response()->json(['error' => 'unauthenticated'], 401);
+    // }
+    $userId = Auth::id();
+    if (!$userId) {
         return response()->json(['error' => 'unauthenticated'], 401);
     }
-
     $kind = $field === 'likes' ? 'like' : 'retweet';
 
     DB::beginTransaction();
@@ -421,71 +439,6 @@ Route::get('/feed', function () {
 
     return response()->json($result);
 });
-// Route::get('/feed', function (Request $request) {
-//     // ログイン中ユーザー（0なら未ログイン扱い）
-//     $viewerId = (int) $request->query('viewer_id', 0);
-
-//     // reactions から feed ごとの likes / retweets を集計
-//     $reactionAgg = DB::table('reactions')
-//         ->select(
-//             'feed_id',
-//             DB::raw("SUM(CASE WHEN kind = 'like' THEN 1 ELSE 0 END) as likes_cnt"),
-//             DB::raw("SUM(CASE WHEN kind = 'retweet' THEN 1 ELSE 0 END) as retweets_cnt")
-//         )
-//         ->groupBy('feed_id');
-
-//     // viewer が押したかどうか（1ユーザー分だけ見る）
-//     $userReactions = DB::table('reactions')
-//         ->select(
-//             'feed_id',
-//             DB::raw("MAX(CASE WHEN kind = 'like' THEN 1 ELSE 0 END) as user_liked"),
-//             DB::raw("MAX(CASE WHEN kind = 'retweet' THEN 1 ELSE 0 END) as user_retweeted")
-//         )
-//         ->where('user_id', $viewerId)
-//         ->groupBy('feed_id');
-
-//     $rows = DB::table('feed_items as f')
-//         ->leftJoinSub($reactionAgg, 'r', function ($join) {
-//             $join->on('r.feed_id', '=', 'f.id');
-//         })
-//         ->leftJoinSub($userReactions, 'ur', function ($join) {
-//             $join->on('ur.feed_id', '=', 'f.id');
-//         })
-//         ->orderBy('f.created_at', 'desc')
-//         ->get([
-//             'f.id',
-//             'f.kind',
-//             'f.data',
-//             'f.created_at',
-//             // answers は feed_items のカラムをそのまま利用
-//             'f.answers',
-//             DB::raw('COALESCE(r.likes_cnt, 0) as likes'),
-//             DB::raw('COALESCE(r.retweets_cnt, 0) as retweets'),
-//             DB::raw('COALESCE(ur.user_liked, 0) as user_liked'),
-//             DB::raw('COALESCE(ur.user_retweeted, 0) as user_retweeted'),
-//         ]);
-
-//     // DBの1行1行をフロント用の形に変換
-//     $result = $rows->map(function ($r) {
-//         $data = json_decode($r->data, true) ?: [];
-
-//         return [
-//             'id'            => $r->id,
-//             'kind'          => $r->kind,        // "quiz" / "quizBundle" / "share"
-//             'data'          => $data,           // 投稿本体
-//             'createdAt'     => $r->created_at,  // フロントで Date に変換してOK
-//             'likes'         => (int) $r->likes,
-//             'retweets'      => (int) $r->retweets,
-//             'answers'       => (int) $r->answers,
-//             'user_liked'    => (int) $r->user_liked,     // 0 or 1
-//             'user_retweeted'=> (int) $r->user_retweeted, // 0 or 1
-//         ];
-//     });
-
-//     return response()->json($result);
-// });
-
-
 
 /* ============================================================
    フォロー情報 API
@@ -759,8 +712,8 @@ Route::post(
  */
 Route::post('/quizzes/{id}/visibility', function (Request $request, string $id) {
     $visibility = (int) $request->input('visibility', 0);
-    $userId     = (int) $request->input('user_id', 0); // 任意（将来 author チェックしたい時用）
-
+    // $userId     = (int) $request->input('user_id', 0); // 任意（将来 author チェックしたい時用）
+    $userId = Auth::id() ?? 0;
     // 値チェック
     if (!in_array($visibility, [1, 2, 3], true)) {
         return response()->json([
