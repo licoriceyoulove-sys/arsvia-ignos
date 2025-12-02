@@ -921,6 +921,9 @@ export default function QuizApp() {
       // async 関数でもここでラップしておけば OK
       void openProfile(id);
     }}
+    posts={posts}
+    onStartQuiz={startQuiz}
+    onShare={openShare}
   />
 )}
 
