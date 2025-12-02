@@ -799,7 +799,18 @@ export default function QuizApp() {
         );
     };
     const activeTab = mode;
-
+const handleHome = () => {
+  if (mode !== "home") {
+    // 他のタブからホームへ遷移
+    setMode("home");
+    // 上までスムーズスクロール
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  } else {
+    // すでにホームにいる → フィード再読み込みしてから上へスクロール
+    reloadFeed(); // ★ ここを loadQuizzesAndFeed ではなく reloadFeed に
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+};
     return (
         // 背景色切り替え
         // bg-white 真っ白
@@ -1064,10 +1075,11 @@ export default function QuizApp() {
             {/* ボトムナビ */}
             <BottomNav
                 active={activeTab}
-                onHome={async () => {
-                    setMode("home");
-                    await loadQuizzesAndFeed(); // ★ ここで最新の投稿を取得
-                }}
+                // onHome={async () => {
+                //     setMode("home");
+                //     await loadQuizzesAndFeed(); // ★ ここで最新の投稿を取得
+                // }}
+                onHome={handleHome}
                 onSearch={() => setMode("search")}
                 onFolders={() => setMode("folders")}
                 onDiscussions={() => {
