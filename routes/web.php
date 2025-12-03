@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 use App\Http\Controllers\AuthController;
 
 /*
@@ -32,13 +33,15 @@ Route::get('/home', function () {
 
     // ログイン中ユーザーを users テーブルから取得
     // ignos_id や display_name を Blade から参照できるようにする
-    $user = DB::table('users')->where('id', $uid)->first();
-
+    // $user = DB::table('users')->where('id', $uid)->first();
+    $user = Auth::user();
     return view('home', [
-        'name' => session('name'),
+        // 'name' => session('name'),
+        'name' => $user->display_name ?? $user->ignos_id ?? $user->id,
         'user' => $user,           // ← これを Blade で使う（$user->ignos_id など）
     ]);
-});
+// });
+})->name('home')->middleware('auth');
 
 // ルート（/）に来たら /login へ飛ばす
 Route::get('/', function () {
@@ -46,25 +49,25 @@ Route::get('/', function () {
 });
 
 // フォロー一覧 API
-Route::get('/api/follows', function () {
-    $uid = session('uid'); // ログインユーザーID
+// Route::get('/api/follows', function () {
+//     $uid = session('uid'); // ログインユーザーID
 
-    if (!$uid) {
-        return response()->json([
-            'authed'  => false,
-            'follows' => [],
-        ]);
-    }
+//     if (!$uid) {
+//         return response()->json([
+//             'authed'  => false,
+//             'follows' => [],
+//         ]);
+//     }
 
-    // follows.user_id = 自分 の行から target_user_id を取得
-    $targets = DB::table('follows')
-        ->where('user_id', $uid)
-        ->pluck('target_user_id')
-        ->all();
+//     // follows.user_id = 自分 の行から target_user_id を取得
+//     $targets = DB::table('follows')
+//         ->where('user_id', $uid)
+//         ->pluck('target_user_id')
+//         ->all();
 
-    return response()->json([
-        'authed'  => true,
-        'user_id' => $uid,
-        'follows' => $targets, // [2, 5, 10, ...] みたいな配列
-    ]);
-});
+//     return response()->json([
+//         'authed'  => true,
+//         'user_id' => $uid,
+//         'follows' => $targets, // [2, 5, 10, ...] みたいな配列
+//     ]);
+// });

@@ -7,6 +7,7 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Auth;
 
 
+
 use App\Http\Controllers\DiscussionController;
 use App\Http\Controllers\DiscussionOpinionController;
 use App\Http\Controllers\DiscussionVoteController;
@@ -91,9 +92,13 @@ Route::post('/quizzes/bulk-delete', function (Request $request) {
  * quizzes テーブルから一覧を取得して JSON で返す
  * ついでに users.display_name を author_display_name として返す
  */
-Route::get('/quizzes', function (Request $request) {
-    // $viewerId = (int) $request->query('viewer_id', 0);
-    $viewerId = Auth::id() ?? 0;
+Route::middleware('web')->get('/quizzes', function (Request $request) {
+    // ★ セッションログインしていない場合は何も返さない
+    $viewerId = Auth::id();
+    if (!$viewerId) {
+        return response()->json([]);
+    }
+
     $query = DB::table('quizzes')
         ->leftJoin('users', 'quizzes.author_id', '=', 'users.id')
         ->select(
@@ -102,26 +107,24 @@ Route::get('/quizzes', function (Request $request) {
             'users.ignos_id as author_ignos_id'
         );
 
-    if ($viewerId > 0) {
-        $followeeIds = DB::table('follows')
-            ->where('user_id', $viewerId)
-            ->pluck('target_user_id')
-            ->toArray();
+    // ★ ここまで来た時点で $viewerId は必ず > 0
+    $followeeIds = DB::table('follows')
+        ->where('user_id', $viewerId)
+        ->pluck('target_user_id')
+        ->toArray();
 
-        $query->where(function ($q) use ($viewerId, $followeeIds) {
+    $query->where(function ($q) use ($viewerId, $followeeIds) {
+        // ① 自分の投稿は常に表示
+        $q->where('quizzes.author_id', $viewerId);
 
-            // ① 自分の投稿は常に表示
-            $q->where('quizzes.author_id', $viewerId);
-
-            // ② フォロー中で visibility != 1
-            if (!empty($followeeIds)) {
-                $q->orWhere(function ($q2) use ($followeeIds) {
-                    $q2->whereIn('quizzes.author_id', $followeeIds)
-                        ->where('quizzes.visibility', '!=', 1);
-                });
-            }
-        });
-    }
+        // ② フォロー中で visibility != 1（自分のみ以外）だけ表示
+        if (!empty($followeeIds)) {
+            $q->orWhere(function ($q2) use ($followeeIds) {
+                $q2->whereIn('quizzes.author_id', $followeeIds)
+                    ->where('quizzes.visibility', '!=', 1);
+            });
+        }
+    });
 
     $rows = $query->orderBy('quizzes.created_at', 'desc')->get();
 
@@ -136,76 +139,77 @@ Route::get('/quizzes', function (Request $request) {
 
 
 
+
+
 /**
  * POST /api/quizzes/bulk
  * React から送られてきたクイズ配列をまとめて保存
  * リクエストボディは JSON 配列想定
  */
-Route::post('/quizzes/bulk', function (Request $request) {
-    $rows = $request->json()->all();
+Route::middleware(['web', 'auth'])
+    ->post('/quizzes/bulk', function (Request $request) {
+        $rows = $request->json()->all();
 
-    if (!is_array($rows)) {
-        return response()->json([
-            'ok' => false,
-            'message' => 'JSON 配列で送信してください',
-        ], 422);
-    }
-
-    // ★ ログイン中ユーザーを「投稿者」として固定
-    $authorId = Auth::id();
-    if (!$authorId) {
-        return response()->json([
-            'ok' => false,
-            'message' => 'ログインが必要です',
-        ], 401);
-    }
-
-    DB::transaction(function () use ($rows, $authorId) {
-        foreach ($rows as $row) {
-            $id           = $row['id'] ?? (string) Str::uuid();
-            $question     = $row['question'] ?? '';
-            $type         = $row['type'] ?? 'choice';
-            $choices      = $row['choices'] ?? null;
-            $correctIndex = $row['correct_index'] ?? null;
-            $modelAnswer  = $row['model_answer'] ?? null;
-            $note         = $row['note'] ?? null;
-            $hashtags     = $row['hashtags'] ?? [];
-            $visibility   = $row['visibility'] ?? 1;
-            // $authorId     = $row['author_id'] ?? null;
-
-            // ★ ここを追加：フロントから送られてくる bundle_id / bundle_order を拾う
-            $bundleId     = $row['bundle_id'] ?? null;
-            $bundleOrder  = $row['bundle_order'] ?? 0;
-
-            // created_at はフロントの値は使わず、サーバー時間に固定
-            $createdAt = now();
-
-            DB::table('quizzes')->updateOrInsert(
-                ['id' => $id],
-                [
-                    'author_id'     => $authorId,
-                    'question'      => $question,
-                    'type'          => $type,
-                    'choices'       => $choices !== null
-                        ? json_encode($choices, JSON_UNESCAPED_UNICODE)
-                        : null,
-                    'correct_index' => $correctIndex,
-                    'model_answer'  => $modelAnswer,
-                    'note'          => $note,
-                    'hashtags'      => json_encode($hashtags, JSON_UNESCAPED_UNICODE),
-                    'visibility'    => $visibility,
-                    'created_at'    => $createdAt,
-
-                    // ★ ここも追加：DBのカラムに保存
-                    'bundle_id'     => $bundleId,
-                    'bundle_order'  => $bundleOrder,
-                ]
-            );
+        if (!is_array($rows)) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'JSON 配列で送信してください',
+            ], 422);
         }
-    });
 
-    return response()->json(['ok' => true]);
-})->withoutMiddleware(\App\Http\Middleware\VerifyCsrfToken::class);
+        // auth ミドルウェアでログインは保証されるが、
+        // 念のためチェックを残しておくのもOK
+        $authorId = Auth::id();
+        if (!$authorId) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'ログインが必要です',
+            ], 401);
+        }
+
+        DB::transaction(function () use ($rows, $authorId) {
+            foreach ($rows as $row) {
+                $id           = $row['id'] ?? (string) Str::uuid();
+                $question     = $row['question'] ?? '';
+                $type         = $row['type'] ?? 'choice';
+                $choices      = $row['choices'] ?? null;
+                $correctIndex = $row['correct_index'] ?? null;
+                $modelAnswer  = $row['model_answer'] ?? null;
+                $note         = $row['note'] ?? null;
+                $hashtags     = $row['hashtags'] ?? [];
+                $visibility   = $row['visibility'] ?? 1;
+
+                $bundleId     = $row['bundle_id'] ?? null;
+                $bundleOrder  = $row['bundle_order'] ?? 0;
+
+                $createdAt = now();
+
+                DB::table('quizzes')->updateOrInsert(
+                    ['id' => $id],
+                    [
+                        'author_id'     => $authorId,
+                        'question'      => $question,
+                        'type'          => $type,
+                        'choices'       => $choices !== null
+                            ? json_encode($choices, JSON_UNESCAPED_UNICODE)
+                            : null,
+                        'correct_index' => $correctIndex,
+                        'model_answer'  => $modelAnswer,
+                        'note'          => $note,
+                        'hashtags'      => json_encode($hashtags, JSON_UNESCAPED_UNICODE),
+                        'visibility'    => $visibility,
+                        'created_at'    => $createdAt,
+                        'bundle_id'     => $bundleId,
+                        'bundle_order'  => $bundleOrder,
+                    ]
+                );
+            }
+        });
+
+        return response()->json(['ok' => true]);
+    })
+    ->withoutMiddleware(VerifyCsrfToken::class);   // ← ここはこのままでOK（CSRFだけ外す）
+
 
 
 // ★ 追加: 指定ユーザーの投稿一覧（プロフィール用）
@@ -279,159 +283,173 @@ Route::get('/quizzes/global', function (Request $request) {
 /**
  * POST /api/feed
  */
-Route::post('/feed', function (Request $request) {
-    $body = $request->json()->all();
+Route::middleware(['web', 'auth'])
+    ->post('/feed', function (Request $request) {
+        $body = $request->json()->all();
 
-        // ★ ログイン中ユーザーを投稿者として固定
-    $authorId = Auth::id();
-    if (!$authorId) {
-        return response()->json(['error' => 'unauthenticated'], 401);
-    }
+        $authorId = Auth::id();
+        if (!$authorId) {
+            return response()->json(['error' => 'unauthenticated'], 401);
+        }
 
-    $id = $body['id'] ?? (string) Str::uuid();
-    $kind = $body['kind'] ?? 'quiz';
-    $data = $body['data'] ?? [];
-    $likes = $body['likes'] ?? 0;
-    $retweets = $body['retweets'] ?? 0;
-    $answers = $body['answers'] ?? 0;
-    // $authorId  = $body['author_id']  ?? null;
-    $createdAt = now();
+        $id       = $body['id'] ?? (string) Str::uuid();
+        $kind     = $body['kind'] ?? 'quiz';
+        $data     = $body['data'] ?? [];
+        $likes    = $body['likes'] ?? 0;
+        $retweets = $body['retweets'] ?? 0;
+        $answers  = $body['answers'] ?? 0;
+        $createdAt = now();
 
-    DB::table('feed_items')->updateOrInsert(
-        ['id' => $id],
-        [
-            'kind' => $kind,
-            'data' => json_encode($data, JSON_UNESCAPED_UNICODE),
-            'likes' => $likes,
-            'retweets' => $retweets,
-            'answers' => $answers,
-            'created_at' => $createdAt,
-            'author_id' => $authorId,
-        ]
-    );
+        DB::table('feed_items')->updateOrInsert(
+            ['id' => $id],
+            [
+                'kind'       => $kind,
+                'data'       => json_encode($data, JSON_UNESCAPED_UNICODE),
+                'likes'      => $likes,
+                'retweets'   => $retweets,
+                'answers'    => $answers,
+                'created_at' => $createdAt,
+                'author_id'  => $authorId,
+            ]
+        );
 
-    return response()->json(['ok' => true]);
-});
+        return response()->json(['ok' => true]);
+    })
+    ->withoutMiddleware(VerifyCsrfToken::class);   // ★ここ重要
+
 
 /**
  * PATCH /api/feed/{id}
  * body: { field: "likes" | "retweets" | "answers", user_id: number }
  */
-Route::patch('/feed/{id}', function (Request $req, string $id) {
-    $field = $req->input('field'); // "likes" | "retweets" | "answers"
+Route::middleware(['web', 'auth'])
+    ->patch('/feed/{id}', function (Request $req, string $id) {
+        $field = $req->input('field'); // "likes" | "retweets" | "answers"
 
-    if (!in_array($field, ['likes', 'retweets', 'answers'], true)) {
-        return response()->json(['error' => 'invalid field'], 400);
-    }
+        if (!in_array($field, ['likes', 'retweets', 'answers'], true)) {
+            return response()->json(['error' => 'invalid field'], 400);
+        }
 
-    // Answer は誰でも何回でも OK → 従来通り feed_items.answers を +1 して終わり
-    if ($field === 'answers') {
-        DB::table('feed_items')
-            ->where('id', $id)
-            ->increment('answers', 1);
+        // Answer は誰でも何回でも OK → 従来通り feed_items.answers を +1 して終わり
+        if ($field === 'answers') {
+            DB::table('feed_items')
+                ->where('id', $id)
+                ->increment('answers', 1);
 
-        // 現在の answers を返しておくとフロントで同期しやすい
-        $answers = DB::table('feed_items')
-            ->where('id', $id)
-            ->value('answers') ?? 0;
+            $answers = DB::table('feed_items')
+                ->where('id', $id)
+                ->value('answers') ?? 0;
 
-        return [
-            'ok'      => true,
-            'answers' => (int) $answers,
-        ];
-    }
+            return [
+                'ok'      => true,
+                'answers' => (int) $answers,
+            ];
+        }
 
-    // Thanks / Look は 1ユーザー1回＋トグル
-    // $userId = (int) $req->input('user_id', 0);
-    // if ($userId <= 0) {
-    //     return response()->json(['error' => 'unauthenticated'], 401);
-    // }
-    $userId = Auth::id();
-    if (!$userId) {
-        return response()->json(['error' => 'unauthenticated'], 401);
-    }
-    $kind = $field === 'likes' ? 'like' : 'retweet';
+        // Thanks / Look は 1ユーザー1回＋トグル
+        $userId = Auth::id();
+        if (!$userId) {
+            // auth ミドルウェアが付いていれば本来ここには来ないが、安全のため残しておいてOK
+            return response()->json(['error' => 'unauthenticated'], 401);
+        }
 
-    DB::beginTransaction();
-    try {
-        // すでにリアクションしているか？
-        $existing = DB::table('reactions')
-            ->where('user_id', $userId)
-            ->where('feed_id', $id)
-            ->where('kind', $kind)
-            ->first();
+        $kind = $field === 'likes' ? 'like' : 'retweet';
 
-        $reacted = false;
-
-        if ($existing) {
-            // ★ もう一度押された → リアクション解除（行削除）
-            DB::table('reactions')
+        DB::beginTransaction();
+        try {
+            $existing = DB::table('reactions')
                 ->where('user_id', $userId)
                 ->where('feed_id', $id)
                 ->where('kind', $kind)
-                ->delete();
+                ->first();
+
             $reacted = false;
-        } else {
-            // ★ 初回 → リアクション追加
-            DB::table('reactions')->insert([
-                'user_id'    => $userId,
-                'feed_id'    => $id,
-                'kind'       => $kind,
-                'created_at' => now(),
+
+            if ($existing) {
+                DB::table('reactions')
+                    ->where('user_id', $userId)
+                    ->where('feed_id', $id)
+                    ->where('kind', $kind)
+                    ->delete();
+                $reacted = false;
+            } else {
+                DB::table('reactions')->insert([
+                    'user_id'    => $userId,
+                    'feed_id'    => $id,
+                    'kind'       => $kind,
+                    'created_at' => now(),
+                ]);
+                $reacted = true;
+            }
+
+            $agg = DB::table('reactions')
+                ->select(
+                    'feed_id',
+                    DB::raw("SUM(CASE WHEN kind = 'like' THEN 1 ELSE 0 END) as likes_cnt"),
+                    DB::raw("SUM(CASE WHEN kind = 'retweet' THEN 1 ELSE 0 END) as retweets_cnt")
+                )
+                ->where('feed_id', $id)
+                ->groupBy('feed_id')
+                ->first();
+
+            $likes    = $agg->likes_cnt    ?? 0;
+            $retweets = $agg->retweets_cnt ?? 0;
+
+            DB::commit();
+
+            return [
+                'ok'       => true,
+                'reacted'  => $reacted,
+                'likes'    => (int) $likes,
+                'retweets' => (int) $retweets,
+            ];
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            \Log::error('PATCH /feed failed', [
+                'feed_id' => $id,
+                'error'   => $e->getMessage(),
             ]);
-            $reacted = true;
+            return response()->json(['error' => 'server_error'], 500);
         }
+    })
+    ->withoutMiddleware(VerifyCsrfToken::class);
 
-        // ★ 現在の likes / retweets を reactions から集計
-        $agg = DB::table('reactions')
-            ->select(
-                'feed_id',
-                DB::raw("SUM(CASE WHEN kind = 'like' THEN 1 ELSE 0 END) as likes_cnt"),
-                DB::raw("SUM(CASE WHEN kind = 'retweet' THEN 1 ELSE 0 END) as retweets_cnt")
-            )
-            ->where('feed_id', $id)
-            ->groupBy('feed_id')
-            ->first();
 
-        $likes    = $agg->likes_cnt    ?? 0;
-        $retweets = $agg->retweets_cnt ?? 0;
-
-        DB::commit();
-
-        return [
-            'ok'       => true,
-            'reacted'  => $reacted,       // true = 今回押した, false = 今回解除した
-            'likes'    => (int) $likes,   // 現在の合計
-            'retweets' => (int) $retweets,
-        ];
-    } catch (\Throwable $e) {
-        DB::rollBack();
-        \Log::error('PATCH /feed failed', [
-            'feed_id' => $id,
-            'error'   => $e->getMessage(),
-        ]);
-        return response()->json(['error' => 'server_error'], 500);
+// 追加：フィード一覧取得
+Route::middleware('web')->get('/feed', function () {
+    // ★ Auth::id() が取れなければ何も返さない（安全側）
+    $viewerId = Auth::id();
+    if (!$viewerId) {
+        return response()->json([]);
     }
-});
 
+    // フォローしているユーザー一覧
+    $followeeIds = DB::table('follows')
+        ->where('user_id', $viewerId)
+        ->pluck('target_user_id')
+        ->toArray();
 
-// 追加：フィード一覧取得
-// 追加：フィード一覧取得
-Route::get('/feed', function () {
-    $rows = DB::table('feed_items')
-        ->orderBy('created_at', 'desc')
-        ->get();
+    // 自分 + フォロー中ユーザーの投稿だけに絞る
+    $query = DB::table('feed_items')
+        ->where(function ($q) use ($viewerId, $followeeIds) {
+            $q->where('author_id', $viewerId);
 
-    // DBの1行1行を、フロントの FeedItem 用の形に変換
+            if (!empty($followeeIds)) {
+                $q->orWhereIn('author_id', $followeeIds);
+            }
+        });
+
+    $rows = $query->orderBy('created_at', 'desc')->get();
+
     $result = $rows->map(function ($r) {
         $data = json_decode($r->data, true) ?: [];
 
         return [
             'id'        => $r->id,
-            'kind'      => $r->kind,                // "quiz" / "quizBundle" / "share"
-            'data'      => $data,                   // 投稿本体（クイズやシェア内容）
-            'createdAt' => $r->created_at,          // フロントで Date に変換してOK
-            'likes'     => (int) $r->likes,         // DBの値をそのまま返す
+            'kind'      => $r->kind,
+            'data'      => $data,
+            'createdAt' => $r->created_at,
+            'likes'     => (int) $r->likes,
             'retweets'  => (int) $r->retweets,
             'answers'   => (int) $r->answers,
         ];
@@ -439,6 +457,9 @@ Route::get('/feed', function () {
 
     return response()->json($result);
 });
+
+
+
 
 /* ============================================================
    フォロー情報 API
@@ -710,40 +731,36 @@ Route::post(
  * body: { visibility: 1|2|3, user_id?: number }
  * 指定クイズの公開範囲を変更する
  */
-Route::post('/quizzes/{id}/visibility', function (Request $request, string $id) {
-    $visibility = (int) $request->input('visibility', 0);
-    // $userId     = (int) $request->input('user_id', 0); // 任意（将来 author チェックしたい時用）
-    $userId = Auth::id() ?? 0;
-    // 値チェック
-    if (!in_array($visibility, [1, 2, 3], true)) {
+Route::middleware(['web', 'auth'])
+    ->post('/quizzes/{id}/visibility', function (Request $request, string $id) {
+        $visibility = (int) $request->input('visibility', 0);
+        $userId     = Auth::id() ?? 0;
+
+        if (!in_array($visibility, [1, 2, 3], true)) {
+            return response()->json([
+                'ok'      => false,
+                'message' => 'visibility は 1(自分のみ) / 2(フォロワー限定) / 3(グローバル) のいずれかです',
+            ], 422);
+        }
+
+        $query = DB::table('quizzes')->where('id', $id);
+
+        if ($userId > 0) {
+            $query->where('author_id', $userId);
+        }
+
+        $updated = $query->update(['visibility' => $visibility]);
+
+        if ($updated === 0) {
+            return response()->json([
+                'ok'      => false,
+                'message' => '対象のクイズが見つからないか、更新権限がありません',
+            ], 404);
+        }
+
         return response()->json([
-            'ok'      => false,
-            'message' => 'visibility は 1(自分のみ) / 2(フォロワー限定) / 3(グローバル) のいずれかです',
-        ], 422);
-    }
-
-    // ここで「自分の投稿だけ変更可」にしたい場合
-    // user_id が送られていなければとりあえず author チェックなしで更新
-    $query = DB::table('quizzes')->where('id', $id);
-
-    if ($userId > 0) {
-        // 将来的な安全のため：author_id が自分のものだけ更新
-        $query->where('author_id', $userId);
-    }
-
-    $updated = $query->update(['visibility' => $visibility]);
-
-    if ($updated === 0) {
-        // id が存在しない or 自分の投稿ではない
-        return response()->json([
-            'ok'      => false,
-            'message' => '対象のクイズが見つからないか、更新権限がありません',
-        ], 404);
-    }
-
-    return response()->json([
-        'ok'         => true,
-        'visibility' => $visibility,
-    ]);
-// })->withoutMiddleware(VerifyCsrfToken::class);
-})->withoutMiddleware(\App\Http\Middleware\VerifyCsrfToken::class);
+            'ok'         => true,
+            'visibility' => $visibility,
+        ]);
+    })
+    ->withoutMiddleware(VerifyCsrfToken::class);
