@@ -648,27 +648,47 @@ export default function QuizApp() {
         postFeed(toFeedRow(item as any)).catch(() => {});
     };
 
-    const handleBulkImported = (newPosts: QuizPost[]) => {
-        if (!newPosts.length) return;
+    // const handleBulkImported = (newPosts: QuizPost[]) => {
+    //     if (!newPosts.length) return;
 
-        // 1) posts に追加
-        setPosts((prev) => [...newPosts, ...prev]);
+    //     // 1) posts に追加
+    //     setPosts((prev) => [...newPosts, ...prev]);
 
-        // 2) feed にも追加（単発投稿として扱う）
-        const newFeedItems: FeedItem[] = newPosts.map((p) => ({
-            id: p.id,
-            kind: "quiz",
-            data: p,
-            createdAt: p.createdAt,
-            likes: 0,
-            retweets: 0,
-            answers: 0,
-        }));
-        setFeed((prev) => [...newFeedItems, ...prev]);
+    //     // 2) feed にも追加（単発投稿として扱う）
+    //     const newFeedItems: FeedItem[] = newPosts.map((p) => ({
+    //         id: p.id,
+    //         kind: "quiz",
+    //         data: p,
+    //         createdAt: p.createdAt,
+    //         likes: 0,
+    //         retweets: 0,
+    //         answers: 0,
+    //     }));
+    //     setFeed((prev) => [...newFeedItems, ...prev]);
 
-        // 3) DB に保存
-        bulkUpsertQuizzes(newPosts.map(toQuizRow)).catch(() => {});
-    };
+    //     // 3) DB に保存
+    //     bulkUpsertQuizzes(newPosts.map(toQuizRow)).catch(() => {});
+    // };
+const handleBulkImported = (newPosts: QuizPost[]) => {
+  if (!newPosts.length) return;
+
+  // 1つのまとめ投稿用の bundleId を採番
+  const bundleId = uid();
+  const baseTime = Date.now();
+
+  // 各問題に bundleId / bundleOrder を付与して 1 つのバンドルにする
+  const bundle: QuizPost[] = newPosts.map((p, idx) => ({
+    ...p,
+    bundleId,
+    bundleOrder: idx,
+    // createdAt が未設定ならここで埋めておく（念のため）
+    createdAt: p.createdAt ?? baseTime + idx,
+  }));
+
+  // 既に用意してある「まとめ投稿」用の関数に丸投げ
+  addPostBundle(bundle);
+};
+
 
     const visibleFeed = useMemo(() => {
         // /api/quizzes が viewer_id に応じて

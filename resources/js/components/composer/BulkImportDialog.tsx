@@ -177,8 +177,8 @@ export const BulkImportDialog: React.FC<Props> = ({
   "question": "問題文",
   "type": "choice" または "text",
   "correct": "正解",
-  "wrongs": ["不正解1", "不正解2"],
-  "note": "解説（丁寧に）"
+  "wrongs": ["不正解1", "不正解2", "不正解3"],
+  "note": "解説（中学生でも理解できるレベルで、不正解の選択肢に対しても解説を行ってください。）"
 }
 
 【生成してほしい内容】
