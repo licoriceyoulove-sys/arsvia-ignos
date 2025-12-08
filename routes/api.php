@@ -7,11 +7,21 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Auth;
 
 
-
+use App\Http\Controllers\Api\AuthApiController;
 use App\Http\Controllers\DiscussionController;
 use App\Http\Controllers\DiscussionOpinionController;
 use App\Http\Controllers\DiscussionVoteController;
 use App\Http\Middleware\VerifyCsrfToken;
+
+// ▼ トークンログイン用 API （例）
+Route::post('/login-token', [AuthApiController::class, 'login']);
+Route::post('/logout-token', [AuthApiController::class, 'logout'])->middleware('auth:sanctum');
+
+// ログイン中ユーザー確認用（任意）
+Route::get('/me', function (Request $request) {
+    return $request->user();
+})->middleware('auth:sanctum');
+
 /*
 |--------------------------------------------------------------------------
 | API Routes
@@ -146,7 +156,7 @@ Route::middleware('web')->get('/quizzes', function (Request $request) {
  * React から送られてきたクイズ配列をまとめて保存
  * リクエストボディは JSON 配列想定
  */
-Route::middleware(['web', 'auth'])
+Route::middleware(['auth:sanctum'])
     ->post('/quizzes/bulk', function (Request $request) {
         $rows = $request->json()->all();
 
@@ -207,8 +217,7 @@ Route::middleware(['web', 'auth'])
         });
 
         return response()->json(['ok' => true]);
-    })
-    ->withoutMiddleware(VerifyCsrfToken::class);   // ← ここはこのままでOK（CSRFだけ外す）
+    });
 
 
 
@@ -283,7 +292,7 @@ Route::get('/quizzes/global', function (Request $request) {
 /**
  * POST /api/feed
  */
-Route::middleware(['web', 'auth'])
+Route::middleware(['auth:sanctum'])
     ->post('/feed', function (Request $request) {
         $body = $request->json()->all();
 
@@ -314,15 +323,14 @@ Route::middleware(['web', 'auth'])
         );
 
         return response()->json(['ok' => true]);
-    })
-    ->withoutMiddleware(VerifyCsrfToken::class);   // ★ここ重要
+    });
 
 
 /**
  * PATCH /api/feed/{id}
  * body: { field: "likes" | "retweets" | "answers", user_id: number }
  */
-Route::middleware(['web', 'auth'])
+Route::middleware(['auth:sanctum'])
     ->patch('/feed/{id}', function (Request $req, string $id) {
         $field = $req->input('field'); // "likes" | "retweets" | "answers"
 
@@ -411,12 +419,11 @@ Route::middleware(['web', 'auth'])
             ]);
             return response()->json(['error' => 'server_error'], 500);
         }
-    })
-    ->withoutMiddleware(VerifyCsrfToken::class);
+    });
 
 
 // 追加：フィード一覧取得
-Route::middleware('web')->get('/feed', function () {
+Route::middleware('auth:sanctum')->get('/feed', function () {
     // ★ Auth::id() が取れなければ何も返さない（安全側）
     $viewerId = Auth::id();
     if (!$viewerId) {
@@ -701,7 +708,7 @@ Route::get('/category-smalls', function () {
 });
 
 // ★ 議論API（セッションログインを使う版）
-Route::middleware('web')->group(function () {
+Route::middleware('auth:sanctum')->group(function () {
 
     // 議題一覧＆検索（閲覧はログイン必須にしたくなければ、このままでもOK）
     Route::get('/discussions', [DiscussionController::class, 'index']);
@@ -731,7 +738,7 @@ Route::post(
  * body: { visibility: 1|2|3, user_id?: number }
  * 指定クイズの公開範囲を変更する
  */
-Route::middleware(['web', 'auth'])
+Route::middleware(['auth:sanctum'])
     ->post('/quizzes/{id}/visibility', function (Request $request, string $id) {
         $visibility = (int) $request->input('visibility', 0);
         $userId     = Auth::id() ?? 0;
@@ -762,5 +769,4 @@ Route::middleware(['web', 'auth'])
             'ok'         => true,
             'visibility' => $visibility,
         ]);
-    })
-    ->withoutMiddleware(VerifyCsrfToken::class);
+    });

@@ -7,7 +7,30 @@ console.log("VITE_API_BASE =", API_BASE);
 import type { QuizRowFromApi } from "./mapper";
 import axios from "axios";
 import type { Visibility, FeedItem } from "../types/quiz";
-import { CURRENT_USER_ID } from "../utils/user";
+import { CURRENT_USER_ID, API_TOKEN } from "../utils/user";
+
+// declare global {
+//   interface Window {
+//     Ignos?: {
+//       apiToken?: string | null;
+//       // ほか userId なども実際には入っている
+//       [k: string]: any;
+//     };
+//   }
+// }
+
+// const API_TOKEN = window.Ignos?.apiToken ?? null;
+
+function authHeaders(extra: HeadersInit = {}): HeadersInit {
+  const base: Record<string, string> = {
+    ...Object.fromEntries(Object.entries(extra)),
+  };
+  if (API_TOKEN) {
+    base["Authorization"] = `Bearer ${API_TOKEN}`;
+  }
+  return base;
+}
+
 // 共通: fetch 失敗時にサーバの応答も添えて投げる
 const assertOk = async (res: Response, label: string) => {
   if (!res.ok) {
@@ -65,6 +88,10 @@ export async function getQuizzes(viewerId?: number) {
   const res = await fetch(`${API_BASE}/quizzes${param}`, {
     cache: "no-store",
     credentials: "include",
+    headers: authHeaders({
+      "X-Requested-With": "XMLHttpRequest",
+    }),
+
   });
   if (!res.ok) {
     throw new Error(`getQuizzes failed: ${res.status}`);
@@ -87,7 +114,10 @@ export async function getUserQuizzes(
 export async function bulkUpsertQuizzes(rows: any[]) {
   const res = await fetch(`${API_BASE}/quizzes/bulk`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({
+      "Content-Type": "application/json",
+      "X-Requested-With": "XMLHttpRequest",
+    }),
     body: JSON.stringify(rows),
     credentials: "include",
   });
@@ -100,10 +130,10 @@ export async function updateQuizVisibility(
 ): Promise<void> {
   const res = await fetch(`${API_BASE}/quizzes/${id}/visibility`, {
     method: "POST", // ここはバックエンドに合わせて POST / PATCH どちらでもOK
-    headers: {
+    headers: authHeaders({
       "Content-Type": "application/json",
       "X-Requested-With": "XMLHttpRequest",
-    },
+    }),
     credentials: "include",
     body: JSON.stringify({ visibility }),
   });
@@ -149,7 +179,10 @@ export const searchUsers = async (keyword: string): Promise<UserSearchResult[]> 
 export async function postFeed(item: any) {
   const res = await fetch(`${API_BASE}/feed`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({
+      "Content-Type": "application/json",
+      "X-Requested-With": "XMLHttpRequest",
+    }),
     body: JSON.stringify(item),
     credentials: "include",
   });
@@ -188,10 +221,10 @@ export async function patchFeed(
 > {
   const res = await fetch(`${API_BASE}/feed/${encodeURIComponent(id)}`, {
     method: "PATCH",
-    headers: {
+    headers: authHeaders({
       "Content-Type": "application/json",
       "X-Requested-With": "XMLHttpRequest",
-    },
+    }),
     credentials: "include",
     body: JSON.stringify({
       field,
@@ -210,10 +243,10 @@ export async function deleteQuizzes(ids: string[]): Promise<void> {
 
   await fetch(`${API_BASE}/quizzes/bulk-delete`, {
     method: "POST", // DELETE + body 対応なら DELETE でもOK
-    headers: {
+    headers: authHeaders({
       "Content-Type": "application/json",
       "X-Requested-With": "XMLHttpRequest",
-    },
+    }),
     credentials: "include",
     body: JSON.stringify({ ids }),
   });
@@ -310,6 +343,9 @@ export const getGlobalQuizzes = async (): Promise<QuizRowFromApi[]> => {
 export async function getFeed(): Promise<FeedItem[]> {
   const res = await fetch(`${API_BASE}/feed`, {
     credentials: "include",
+    headers: authHeaders({
+      "X-Requested-With": "XMLHttpRequest",
+    }),
   });
   if (!res.ok) {
     throw new Error("getFeed failed");

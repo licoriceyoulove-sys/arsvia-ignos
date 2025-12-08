@@ -25,6 +25,7 @@
     name: @json(session('name')),
     ignosId: @json(optional($user)->ignos_id),
     accountLevel: {{ session('account_level') ?? 2 }},
+    apiToken: @json(session('api_token')),
   };
 </script>
     {{-- Vite (React) のバンドルを読み込む --}}

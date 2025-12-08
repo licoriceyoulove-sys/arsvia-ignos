@@ -1,29 +1,44 @@
-// // resources/js/utils/user.ts
+// resources/js/utils/user.ts
 
-// // window.Ignos の型定義（すでにどこかで書いていたらそちらを移動）
+// Ignos 用の型を定義しておくと他でも使いやすい
+export type IgnosBootstrap = {
+  userId: number;
+  name?: string;
+  ignosId?: string;
+  accountLevel?: number;
+  apiToken?: string | null;
+};
+
+// window.Ignos の型定義（グローバルはここだけ）
 declare global {
   interface Window {
-    Ignos?: {
-      userId: number;
-      name?: string;
-      ignosId?: string;
-      accountLevel?: number;
-    };
+    Ignos?: IgnosBootstrap;
   }
 }
 
+// 1回だけ取り出して使い回す
+const bootstrap: IgnosBootstrap = window.Ignos ?? {
+  userId: 0,
+  accountLevel: 2,
+  apiToken: null,
+};
+
 // ログイン中ユーザーID（未ログインは 0 扱い）
-export const CURRENT_USER_ID = window.Ignos?.userId ?? 0;
+export const CURRENT_USER_ID = bootstrap.userId ?? 0;
+
 // アカウントレベル（1:管理者, 2:通常, 3:学割）
-export const ACCOUNT_LEVEL: number = window.Ignos?.accountLevel ?? 2;
+export const ACCOUNT_LEVEL: number = bootstrap.accountLevel ?? 2;
+
 // 管理者フラグ
 export const IS_ADMIN: boolean = ACCOUNT_LEVEL === 1;
 
-// // 表示用ユーザー名（簡易版）
-// // 本番では API から取得したユーザー情報に差し替え予定
+// ← ★ これを client.ts から使う
+export const API_TOKEN: string | null = bootstrap.apiToken ?? null;
+
+// 表示用ユーザー名（簡易版）
 export const getUserDisplayName = (id?: number | null) => {
   if (!id || id === 0) return "ゲスト";
-  if (id === CURRENT_USER_ID && window.Ignos?.name) return window.Ignos.name;
+  if (id === CURRENT_USER_ID && bootstrap.name) return bootstrap.name;
   return `ユーザー${id}`;
 };
 
@@ -33,7 +48,7 @@ export const getUserScreenName = (id?: number | null) => {
 };
 
 export const getCurrentUserIgnosId = (): string | null => {
-  return window.Ignos?.ignosId ?? null;
+  return bootstrap.ignosId ?? null;
 };
 
 // 投稿ごとに付いてくる authorDisplayName を優先して表示する。
@@ -45,9 +60,7 @@ export const pickDisplayName = (
     return authorDisplayName; // DB の display_name を使用
   }
 
-  // display_name が無い場合
   if (!fallbackId || fallbackId === 0) return "ゲスト";
 
-  // フォールバック：ユーザーIDベース
   return `ユーザー${fallbackId}`;
 };
