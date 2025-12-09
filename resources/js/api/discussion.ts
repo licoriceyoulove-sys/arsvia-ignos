@@ -2,6 +2,8 @@
 
 import axios from "axios";
 import { API_BASE } from "./client";
+import { API_TOKEN } from "../utils/user"; // ★ 追加
+
 import type {
   DiscussionSummary,
   DiscussionDetail,
@@ -16,10 +18,22 @@ import type {
 const client = axios.create({
   baseURL: API_BASE,
   withCredentials: true,
-  headers: {
-    "X-Requested-With": "XMLHttpRequest",
-    "Content-Type": "application/json",
-  },
+});
+
+// 共通ヘッダ付与（毎リクエスト）
+client.interceptors.request.use((config) => {
+  const h = config.headers;
+
+  if (h && typeof h.set === "function") {
+    h.set("X-Requested-With", "XMLHttpRequest");
+    h.set("Content-Type", "application/json");
+
+    if (API_TOKEN) {
+      h.set("Authorization", `Bearer ${API_TOKEN}`);
+    }
+  }
+
+  return config;
 });
 
 // -----------------------------
@@ -129,9 +143,6 @@ export const fetchDiscussions = async (
 /**
  * 議論詳細の取得（アジェンダ＋意見一覧＋投票状況）
  * GET /api/discussions/{id}
- *
- * ※ QuizApp では fetchDiscussionDetail(id) の形で呼んでいるので
- *    引数は id 1つだけにしています。
  */
 export async function fetchDiscussionDetail(
   id: number
@@ -143,13 +154,9 @@ export async function fetchDiscussionDetail(
 /**
  * 議題の新規作成
  * POST /api/discussions
- *
- * QuizApp では createDiscussion(payload) として使っているので
- * 引数は payload 1つだけ。
- * （誰の投稿かはサーバ側で $request->user() などで判断する想定）
  */
 export async function createDiscussion(
-  payload: { title: string; agenda: string; tags: string[] },
+  payload: { title: string; agenda: string; tags: string[] }
 ): Promise<DiscussionSummary> {
   const res = await client.post<DiscussionSummaryFromApi>("/discussions", {
     ...payload,

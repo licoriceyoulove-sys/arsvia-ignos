@@ -15,13 +15,12 @@ class DiscussionVoteController extends Controller
      */
     public function store(Request $request, DiscussionOpinion $opinion)
     {
-        // ① セッションからログインユーザーIDを取得
-        $uid = $request->session()->get('uid');
-
-        if (!$uid) {
-            // ログインしていない
+        // ★ Sanctum 経由のログインユーザー
+        $user = $request->user();
+        if (!$user) {
             return response()->json(['error' => 'unauthenticated'], 401);
         }
+        $uid = (int) $user->id;
 
         // ② vote パラメータをチェック
         $data = $request->validate([
