@@ -234,7 +234,7 @@ export const Composer: React.FC<ComposerProps> = ({
           <input
             value={sharedTags}
             onChange={(e) => setSharedTags(e.target.value)}
-            placeholder="#英単語 #歴史 など（カンマ・空白区切り）"
+            placeholder="英単語 歴史 など（カンマ・空白区切り）"
             className="w-full px-3 py-2 bg-gray-50 rounded-xl border border-gray-200"
           />
         </div>

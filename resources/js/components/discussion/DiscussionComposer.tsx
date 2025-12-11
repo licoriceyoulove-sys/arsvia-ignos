@@ -51,7 +51,7 @@ const DiscussionComposer: React.FC<Props> = ({ open, onClose, onSubmit }) => {
             className="w-full border rounded px-2 py-1 text-sm"
             value={tagsInput}
             onChange={(e) => setTagsInput(e.target.value)}
-            placeholder="#教育 #ICT など"
+            placeholder="教育 ICT など"
           />
         </div>
 

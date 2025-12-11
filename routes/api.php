@@ -390,6 +390,7 @@ Route::middleware(['auth:sanctum'])
                 $reacted = true;
             }
 
+            // ★ reactions から集計
             $agg = DB::table('reactions')
                 ->select(
                     'feed_id',
@@ -400,16 +401,25 @@ Route::middleware(['auth:sanctum'])
                 ->groupBy('feed_id')
                 ->first();
 
-            $likes    = $agg->likes_cnt    ?? 0;
-            $retweets = $agg->retweets_cnt ?? 0;
+            // ★ null 安全に（リアクションが1つもない場合でもOKにする）
+            $likes    = $agg ? (int) $agg->likes_cnt    : 0;
+            $retweets = $agg ? (int) $agg->retweets_cnt : 0;
+
+            // ★★★ ここが今回の本命：feed_items の likes / retweets も更新
+            DB::table('feed_items')
+                ->where('id', $id)
+                ->update([
+                    'likes'    => $likes,
+                    'retweets' => $retweets,
+                ]);
 
             DB::commit();
 
             return [
                 'ok'       => true,
                 'reacted'  => $reacted,
-                'likes'    => (int) $likes,
-                'retweets' => (int) $retweets,
+                'likes'    => $likes,
+                'retweets' => $retweets,
             ];
         } catch (\Throwable $e) {
             DB::rollBack();
@@ -422,7 +432,8 @@ Route::middleware(['auth:sanctum'])
     });
 
 
-// 追加：フィード一覧取得
+
+// 追加：フィード一覧取得（reactions から Thanks / Look を集計する版）
 Route::middleware('auth:sanctum')->get('/feed', function () {
     // ★ Auth::id() が取れなければ何も返さない（安全側）
     $viewerId = Auth::id();
@@ -437,33 +448,57 @@ Route::middleware('auth:sanctum')->get('/feed', function () {
         ->toArray();
 
     // 自分 + フォロー中ユーザーの投稿だけに絞る
-    $query = DB::table('feed_items')
+    $feedRows = DB::table('feed_items')
         ->where(function ($q) use ($viewerId, $followeeIds) {
             $q->where('author_id', $viewerId);
 
             if (!empty($followeeIds)) {
                 $q->orWhereIn('author_id', $followeeIds);
             }
-        });
+        })
+        ->orderBy('created_at', 'desc')
+        ->get();
 
-    $rows = $query->orderBy('created_at', 'desc')->get();
+    // reactions テーブルから likes / retweets を集計
+    $feedIds = $feedRows->pluck('id')->all();
 
-    $result = $rows->map(function ($r) {
-        $data = json_decode($r->data, true) ?: [];
+    $reactionAgg = DB::table('reactions')
+        ->select(
+            'feed_id',
+            DB::raw("SUM(CASE WHEN kind = 'like' THEN 1 ELSE 0 END) as likes_cnt"),
+            DB::raw("SUM(CASE WHEN kind = 'retweet' THEN 1 ELSE 0 END) as retweets_cnt")
+        )
+        ->whereIn('feed_id', $feedIds)
+        ->groupBy('feed_id')
+        ->get()
+        ->keyBy('feed_id'); // feed_id => 集計結果
 
-        return [
-            'id'        => $r->id,
-            'kind'      => $r->kind,
-            'data'      => $data,
-            'createdAt' => $r->created_at,
-            'likes'     => (int) $r->likes,
-            'retweets'  => (int) $r->retweets,
-            'answers'   => (int) $r->answers,
-        ];
-    });
+$result = $feedRows->map(function ($r) use ($reactionAgg) {
+    $data = json_decode($r->data, true) ?: [];
+
+    $agg = $reactionAgg->get($r->id);
+
+    // ★ null 安全に
+    $likes    = $agg ? (int) $agg->likes_cnt    : 0;
+    $retweets = $agg ? (int) $agg->retweets_cnt : 0;
+
+    return [
+        'id'        => $r->id,
+        'kind'      => $r->kind,
+        'data'      => $data,
+        'createdAt' => $r->created_at,
+        'likes'     => $likes,
+        'retweets'  => $retweets,
+        'answers'   => (int) $r->answers,
+    ];
+});
+
 
     return response()->json($result);
 });
+
+
+
 
 
 
