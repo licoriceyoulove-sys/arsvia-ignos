@@ -633,8 +633,10 @@ export default function QuizApp() {
 
         // feed は1アイテム（quizBundle）として登録
         const createdAt = bundle[0]?.createdAt ?? Date.now();
+        const bundleId = bundle[0]?.bundleId;
+        const feedId = bundleId ? `bundle_${bundleId}` : uid();
         const item: FeedQuizBundleItem = {
-            id: uid(),
+            id: feedId,
             kind: "quizBundle",
             data: bundle,
             createdAt,
@@ -997,6 +999,7 @@ const handleHome = () => {
                                     setAnswerPool(posts);
                                     setMode("answer");
                                 }}
+                                // reactionStats={profileReactionStats}
                             />
                         )}
                     </>

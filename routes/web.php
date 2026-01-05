@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\FeedController;
 
 /*
 |--------------------------------------------------------------------------
@@ -71,3 +72,11 @@ Route::get('/', function () {
 //         'follows' => $targets, // [2, 5, 10, ...] みたいな配列
 //     ]);
 // });
+
+Route::middleware(['web', 'auth'])
+    ->prefix('api')
+    ->group(function () {
+        Route::get('/feed', [FeedController::class, 'index']);
+        Route::post('/feed', [FeedController::class, 'store']);
+        Route::patch('/feed/{id}', [FeedController::class, 'patch']);
+    });

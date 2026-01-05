@@ -4,31 +4,32 @@
 const RAW_BASE = import.meta.env.VITE_API_BASE || "/api";
 export const API_BASE = (RAW_BASE as string).replace(/\/$/, "");
 console.log("VITE_API_BASE =", API_BASE);
+
 import type { QuizRowFromApi } from "./mapper";
 import axios from "axios";
 import type { Visibility, FeedItem } from "../types/quiz";
-import { CURRENT_USER_ID, API_TOKEN } from "../utils/user";
+// NOTE: セッション方式に統一するので API_TOKEN は使いません（残っていてもOK）
+import { API_TOKEN } from "../utils/user";
 
-// declare global {
-//   interface Window {
-//     Ignos?: {
-//       apiToken?: string | null;
-//       // ほか userId なども実際には入っている
-//       [k: string]: any;
-//     };
-//   }
-// }
-
-// const API_TOKEN = window.Ignos?.apiToken ?? null;
-
+/**
+ * セッション方式のため Authorization は付けない。
+ * ただしヘッダ合成を統一する目的で関数は残す。
+ */
 function authHeaders(extra: HeadersInit = {}): HeadersInit {
-  const base: Record<string, string> = {
+  return {
     ...Object.fromEntries(Object.entries(extra)),
   };
-  if (API_TOKEN) {
-    base["Authorization"] = `Bearer ${API_TOKEN}`;
-  }
-  return base;
+}
+
+/**
+ * Blade 側に <meta name="csrf-token" content="{{ csrf_token() }}"> がある前提。
+ * PATCH/POST/DELETE など「状態変更」系リクエストに付ける。
+ */
+function csrfHeader(): Record<string, string> {
+  const token = document
+    .querySelector('meta[name="csrf-token"]')
+    ?.getAttribute("content");
+  return token ? { "X-CSRF-TOKEN": token } : {};
 }
 
 // 共通: fetch 失敗時にサーバの応答も添えて投げる
@@ -45,7 +46,11 @@ const assertOk = async (res: Response, label: string) => {
 export async function login(params: { id: string; password: string }) {
   const res = await fetch(`${API_BASE}/login`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({
+      "Content-Type": "application/json",
+      "X-Requested-With": "XMLHttpRequest",
+      ...csrfHeader(), // ✅ 追加（ログインもPOSTなので付ける）
+    }),
     body: JSON.stringify(params),
     credentials: "include",
   });
@@ -59,6 +64,10 @@ export async function login(params: { id: string; password: string }) {
 export async function logout() {
   const res = await fetch(`${API_BASE}/logout`, {
     method: "POST",
+    headers: authHeaders({
+      "X-Requested-With": "XMLHttpRequest",
+      ...csrfHeader(), // ✅
+    }),
     credentials: "include",
   });
   await assertOk(res, "logout");
@@ -69,6 +78,9 @@ export async function getMe() {
     method: "GET",
     credentials: "include",
     cache: "no-store",
+    headers: authHeaders({
+      "X-Requested-With": "XMLHttpRequest",
+    }),
   });
   await assertOk(res, "getMe");
   return res.json() as Promise<{
@@ -85,27 +97,30 @@ export async function getQuizzes(viewerId?: number) {
     viewerId && viewerId > 0
       ? `?viewer_id=${encodeURIComponent(String(viewerId))}`
       : "";
+
   const res = await fetch(`${API_BASE}/quizzes${param}`, {
     cache: "no-store",
     credentials: "include",
     headers: authHeaders({
       "X-Requested-With": "XMLHttpRequest",
     }),
-
   });
+
   if (!res.ok) {
-    throw new Error(`getQuizzes failed: ${res.status}`);
+    const text = await res.text().catch(() => "");
+    throw new Error(`getQuizzes failed: ${res.status} ${text}`);
   }
   return res.json();
 }
 
 // ★ 追加：プロフィール用「特定ユーザーのクイズ一覧」
-export async function getUserQuizzes(
-  userId: number
-): Promise<QuizRowFromApi[]> {
+export async function getUserQuizzes(userId: number): Promise<QuizRowFromApi[]> {
   const res = await fetch(`${API_BASE}/users/${userId}/quizzes`, {
     cache: "no-store",
     credentials: "include",
+    headers: authHeaders({
+      "X-Requested-With": "XMLHttpRequest",
+    }),
   });
   await assertOk(res, "getUserQuizzes");
   return res.json() as Promise<QuizRowFromApi[]>;
@@ -117,6 +132,7 @@ export async function bulkUpsertQuizzes(rows: any[]) {
     headers: authHeaders({
       "Content-Type": "application/json",
       "X-Requested-With": "XMLHttpRequest",
+      ...csrfHeader(), // ✅
     }),
     body: JSON.stringify(rows),
     credentials: "include",
@@ -129,10 +145,11 @@ export async function updateQuizVisibility(
   visibility: Visibility
 ): Promise<void> {
   const res = await fetch(`${API_BASE}/quizzes/${id}/visibility`, {
-    method: "POST", // ここはバックエンドに合わせて POST / PATCH どちらでもOK
+    method: "POST",
     headers: authHeaders({
       "Content-Type": "application/json",
       "X-Requested-With": "XMLHttpRequest",
+      ...csrfHeader(), // ✅
     }),
     credentials: "include",
     body: JSON.stringify({ visibility }),
@@ -140,48 +157,44 @@ export async function updateQuizVisibility(
   await assertOk(res, "updateQuizVisibility");
 }
 
-// export async function deleteQuizzes(ids: string[]): Promise<void> {
-//   if (!ids.length) return;
-
-//   await fetch(`${API_BASE}/quizzes/bulk-delete`, {
-//     method: "POST",
-//     headers: {
-//       "Content-Type": "application/json",
-//       "X-Requested-With": "XMLHttpRequest",
-//     },
-//     credentials: "include",
-//     body: JSON.stringify({ ids }),
-//   });
-// }
-
 export type UserSearchResult = {
   id: number;
   display_name: string | null;
   ignos_id: string | null;
 };
 
-export const searchUsers = async (keyword: string): Promise<UserSearchResult[]> => {
+export const searchUsers = async (
+  keyword: string
+): Promise<UserSearchResult[]> => {
   const q = keyword.trim();
   if (!q) return [];
 
   const res = await fetch(
     `${API_BASE}/users/search?q=${encodeURIComponent(q)}`,
-    { credentials: "include" }
+    {
+      credentials: "include",
+      headers: authHeaders({
+        "X-Requested-With": "XMLHttpRequest",
+      }),
+    }
   );
 
   if (!res.ok) {
-    throw new Error("ユーザー検索 API エラー");
+    const text = await res.text().catch(() => "");
+    throw new Error(`ユーザー検索 API エラー: ${res.status} ${text}`);
   }
 
   const json = await res.json();
   return (json.users ?? []) as UserSearchResult[];
 };
+
 export async function postFeed(item: any) {
   const res = await fetch(`${API_BASE}/feed`, {
     method: "POST",
     headers: authHeaders({
       "Content-Type": "application/json",
       "X-Requested-With": "XMLHttpRequest",
+      ...csrfHeader(), // ✅
     }),
     body: JSON.stringify(item),
     credentials: "include",
@@ -189,29 +202,6 @@ export async function postFeed(item: any) {
   await assertOk(res, "postFeed");
 }
 
-/**
- * PATCH /feed/{id}
- * サーバ側は { field: "likes" | "retweets" | "answers" } を受け取り、そのカラムを +1 する実装想定。
- */
-// export async function patchFeed(
-//   id: string,
-//   field: "likes" | "retweets" | "answers"
-// ) {
-//   const res = await fetch(`${API_BASE}/feed/${id}`, {
-//     method: "PATCH",
-//     headers: { "Content-Type": "application/json" },
-//     credentials: "include",
-//     body: JSON.stringify({
-//       field,
-//       user_id: CURRENT_USER_ID,  // ★ ここが超重要
-//     }),
-//   });
-
-//   if (!res.ok) {
-//     console.error("patchFeed failed", await res.text());
-//     throw new Error("patchFeed failed");
-//   }
-// }
 export async function patchFeed(
   id: string,
   field: "likes" | "retweets" | "answers"
@@ -224,16 +214,23 @@ export async function patchFeed(
     headers: authHeaders({
       "Content-Type": "application/json",
       "X-Requested-With": "XMLHttpRequest",
+      ...csrfHeader(), // ✅ ここが 419 の本丸
     }),
     credentials: "include",
-    body: JSON.stringify({
-      field,
-      user_id: CURRENT_USER_ID ?? 0,
-    }),
+    body: JSON.stringify({ field }),
   });
 
   if (!res.ok) {
-    throw new Error(`patchFeed failed: ${res.status}`);
+    const text = await res.text().catch(() => "");
+    console.error("patchFeed failed", {
+      status: res.status,
+      body: text,
+      id,
+      field,
+      // 互換のため残してるがセッション方式では通常 false/未使用でOK
+      hasToken: !!API_TOKEN,
+    });
+    throw new Error(`patchFeed failed: ${res.status} ${text}`);
   }
   return await res.json();
 }
@@ -241,15 +238,18 @@ export async function patchFeed(
 export async function deleteQuizzes(ids: string[]): Promise<void> {
   if (!ids.length) return;
 
-  await fetch(`${API_BASE}/quizzes/bulk-delete`, {
-    method: "POST", // DELETE + body 対応なら DELETE でもOK
+  const res = await fetch(`${API_BASE}/quizzes/bulk-delete`, {
+    method: "POST", // 既存実装に合わせる
     headers: authHeaders({
       "Content-Type": "application/json",
       "X-Requested-With": "XMLHttpRequest",
+      ...csrfHeader(), // ✅
     }),
     credentials: "include",
     body: JSON.stringify({ ids }),
   });
+
+  await assertOk(res, "deleteQuizzes");
 }
 
 /* =========================================
@@ -258,6 +258,9 @@ export async function deleteQuizzes(ids: string[]): Promise<void> {
 export async function ping() {
   const res = await fetch(`${API_BASE}/ping`, {
     credentials: "include",
+    headers: authHeaders({
+      "X-Requested-With": "XMLHttpRequest",
+    }),
   });
   await assertOk(res, "ping");
   return res.json();
@@ -266,6 +269,9 @@ export async function ping() {
 export async function dbPing() {
   const res = await fetch(`${API_BASE}/db-ping`, {
     credentials: "include",
+    headers: authHeaders({
+      "X-Requested-With": "XMLHttpRequest",
+    }),
   });
   await assertOk(res, "dbPing");
   return res.json();
@@ -279,6 +285,9 @@ export async function getFollows() {
     method: "GET",
     credentials: "include",
     cache: "no-store",
+    headers: authHeaders({
+      "X-Requested-With": "XMLHttpRequest",
+    }),
   });
   await assertOk(res, "getFollows");
   return res.json() as Promise<{
@@ -288,17 +297,19 @@ export async function getFollows() {
   }>;
 }
 
+/* =========================================
+   カテゴリ
+========================================= */
 export type CategoryLarge = {
   id: number;
   name_jp: string;
   name_en: string | null;
   description: string | null;
-  // 将来的に問題数を返したくなったらここに total_posts?: number; を足す
 };
 
 export type CategoryMiddle = {
   id: number;
-  large_id: number;             // どの大カテゴリに属するか
+  large_id: number;
   name_jp: string;
   name_en: string | null;
   description: string | null;
@@ -315,31 +326,50 @@ export type CategorySmall = {
 
 // 追加：大カテゴリ一覧取得
 export const getCategoryLarges = async (): Promise<CategoryLarge[]> => {
-  const res = await axios.get(`${API_BASE}/category-larges`);
+  // axios は withCredentials を付けないと cookie が飛ばないので注意
+  const res = await axios.get(`${API_BASE}/category-larges`, {
+    withCredentials: true,
+    headers: {
+      "X-Requested-With": "XMLHttpRequest",
+    },
+  });
   return res.data as CategoryLarge[];
 };
 
 export const getCategoryMiddles = async (): Promise<CategoryMiddle[]> => {
-  const res = await axios.get(`${API_BASE}/category-middles`);
+  const res = await axios.get(`${API_BASE}/category-middles`, {
+    withCredentials: true,
+    headers: {
+      "X-Requested-With": "XMLHttpRequest",
+    },
+  });
   return res.data as CategoryMiddle[];
 };
 
 export async function getCategorySmalls(): Promise<CategorySmall[]> {
   const res = await axios.get(`${API_BASE}/category-smalls`, {
     withCredentials: true,
+    headers: {
+      "X-Requested-With": "XMLHttpRequest",
+    },
   });
   return res.data as CategorySmall[];
 }
 
 // 全ユーザーの visibility=3（グローバル）クイズを取得
 export const getGlobalQuizzes = async (): Promise<QuizRowFromApi[]> => {
-  const res = await axios.get<QuizRowFromApi[]>(
-    `${API_BASE}/quizzes/global`,
-    { withCredentials: true }
-  );
+  const res = await axios.get<QuizRowFromApi[]>(`${API_BASE}/quizzes/global`, {
+    withCredentials: true,
+    headers: {
+      "X-Requested-With": "XMLHttpRequest",
+    },
+  });
   return res.data;
 };
 
+/* =========================================
+   フィード取得
+========================================= */
 export async function getFeed(): Promise<FeedItem[]> {
   const res = await fetch(`${API_BASE}/feed`, {
     credentials: "include",
@@ -347,18 +377,21 @@ export async function getFeed(): Promise<FeedItem[]> {
       "X-Requested-With": "XMLHttpRequest",
     }),
   });
+
   if (!res.ok) {
-    throw new Error("getFeed failed");
+    const text = await res.text().catch(() => "");
+    throw new Error(`getFeed failed: ${res.status} ${text}`);
   }
+
   const json = await res.json();
 
   return (json as any[]).map((row) => ({
     id: row.id,
     kind: row.kind,
     data: row.data,
-    createdAt: new Date(row.createdAt).getTime(), // 文字列 -> 数字にしておくと便利
-    likes: row.likes ?? 0,        // ★ サーバーから来た値をそのまま使う
-    retweets: row.retweets ?? 0,  // ★
-    answers: row.answers ?? 0,    // ★
+    createdAt: new Date(row.createdAt).getTime(),
+    likes: row.likes ?? 0,
+    retweets: row.retweets ?? 0,
+    answers: row.answers ?? 0,
   }));
 }

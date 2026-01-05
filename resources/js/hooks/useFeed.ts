@@ -140,17 +140,14 @@ export function useFeed(
       }
 
       // ④ baseFeed に対して、key が一致するものだけ集計値で上書き
-      const mergedFeed: FeedItem[] = baseFeed.map((item) => {
-        const agg = aggMap.get(item.id);
-        if (!agg) return item;
-
-        return {
-          ...item,
-          likes: agg.likes,
-          retweets: agg.retweets,
-          answers: agg.answers,
-        };
-      });
+const mergedFeed: FeedItem[] = baseFeed.map((item) => {
+  const agg = aggMap.get(item.id);
+  if (!agg) {
+    console.log("NO_AGG_FOR", item.id); // ★ これが大量に出るなら feed_items が無い
+    return item;
+  }
+  return { ...item, likes: agg.likes, retweets: agg.retweets, answers: agg.answers };
+});
 
       setFeed(mergedFeed);
     } catch (e) {

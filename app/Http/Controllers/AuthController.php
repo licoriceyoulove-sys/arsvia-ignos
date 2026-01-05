@@ -81,57 +81,31 @@ class AuthController extends Controller
 
     //     return redirect('/home');
     // }
-    public function doLogin(Request $request)
+public function doLogin(Request $request)
 {
-    // 入力バリデーション
     $data = $request->validate([
         'login_id' => ['required', 'string', 'max:64'],
         'password' => ['required', 'string', 'max:200'],
     ]);
 
-    // users テーブルから login_id で1件取得
     $user = DB::table('users')->where('login_id', $data['login_id'])->first();
 
     $fail = fn () =>
         back()->withErrors(['auth' => 'IDまたはパスワードが正しくありません'])
              ->withInput();
 
-    if (!$user) {
-        return $fail();
-    }
+    if (!$user) return $fail();
+    if (!password_verify($data['password'], $user->password_hash)) return $fail();
 
-    // password_hash カラムと照合
-    if (!password_verify($data['password'], $user->password_hash)) {
-        return $fail();
-    }
-
-    // ★ Laravel 認証でログイン（セッション）
+    // ✅ セッションログイン
     Auth::loginUsingId($user->id);
 
-    // ★ Sanctum トークン発行（フロントから使う用）
-    $apiToken = null;
-    if ($eloquentUser = User::find($user->id)) {
-        // （任意）同じ名前の古いトークンを削除しておくとスッキリ
-        $eloquentUser->tokens()->where('name', 'ignos-web')->delete();
-
-        $apiToken = $eloquentUser->createToken('ignos-web')->plainTextToken;
-    }
-
-    // セッションにユーザー情報を保存（既存）
-    $request->session()->put('uid', $user->id);
-    $request->session()->put('name', $user->name ?? '');
-    $request->session()->put('account_level', $user->account_level ?? 2);
-
-    // ★ 発行した API トークンをセッションにも保存
-    if ($apiToken) {
-        $request->session()->put('api_token', $apiToken);
-    }
-
-    // セッションID再発行（セキュリティ対策）
+    // ✅ セッション固定攻撃対策（ログイン後に再発行）
     $request->session()->regenerate();
 
     return redirect('/home');
 }
+
 
     /**
      * POST /logout

@@ -1,0 +1,175 @@
+<?php
+
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Auth;
+
+// 投稿作成
+Route::middleware(['auth:sanctum'])->post('/feed', function (Request $request) {
+    $body = $request->json()->all();
+
+    $authorId = Auth::id();
+    if (!$authorId) return response()->json(['error' => 'unauthenticated'], 401);
+
+    $kind = $body['kind'] ?? 'quiz';
+    $data = $body['data'] ?? [];
+
+    $fixedId = null;
+    if ($kind === 'quizBundle') {
+        $bundleId = null;
+        if (is_array($data) && isset($data[0]) && is_array($data[0])) {
+            $bundleId = $data[0]['bundleId'] ?? ($data[0]['bundle_id'] ?? null);
+        }
+        if ($bundleId) $fixedId = 'bundle_' . $bundleId;
+    }
+
+    $id = $fixedId ?? ($body['id'] ?? (string) Str::uuid());
+
+    DB::table('feed_items')->updateOrInsert(
+        ['id' => $id],
+        [
+            'kind'       => $kind,
+            'data'       => json_encode($data, JSON_UNESCAPED_UNICODE),
+            'likes'      => 0,
+            'retweets'   => 0,
+            'answers'    => (int)($body['answers'] ?? 0),
+            'created_at' => now(),
+            'author_id'  => $authorId,
+        ]
+    );
+
+    return response()->json(['ok' => true, 'id' => $id]);
+});
+
+// Thanks/Look/Answer
+Route::middleware(['auth:sanctum'])->patch('/feed/{id}', function (Request $req, string $id) {
+    $field = $req->input('field');
+    if (!in_array($field, ['likes', 'retweets', 'answers'], true)) {
+        return response()->json(['error' => 'invalid field'], 400);
+    }
+
+    // answers は単純加算（既存仕様）
+    if ($field === 'answers') {
+        DB::table('feed_items')->where('id', $id)->increment('answers', 1);
+        $answers = DB::table('feed_items')->where('id', $id)->value('answers') ?? 0;
+        return ['ok' => true, 'answers' => (int)$answers];
+    }
+
+    $userId = Auth::id();
+    if (!$userId) return response()->json(['error' => 'unauthenticated'], 401);
+
+    $reactionKind  = $field === 'likes' ? 'like' : 'retweet';
+    $counterColumn = $field; // likes or retweets
+
+    // feed_items が無ければ作る（暫定でもOK）
+    if (!DB::table('feed_items')->where('id', $id)->exists()) {
+        $authorFromQuiz = null;
+        $kindGuess = 'quiz';
+
+        if (Str::startsWith($id, 'bundle_')) {
+            $kindGuess = 'quizBundle';
+            $bundleId = Str::after($id, 'bundle_');
+            $authorFromQuiz = DB::table('quizzes')->where('bundle_id', $bundleId)->value('author_id');
+        } else {
+            $authorFromQuiz = DB::table('quizzes')->where('id', $id)->value('author_id');
+        }
+
+        DB::table('feed_items')->insert([
+            'id'         => $id,
+            'kind'       => $kindGuess,
+            'data'       => json_encode([], JSON_UNESCAPED_UNICODE),
+            'likes'      => 0,
+            'retweets'   => 0,
+            'answers'    => 0,
+            'created_at' => now(),
+            'author_id'  => $authorFromQuiz ? (int)$authorFromQuiz : (int)$userId,
+        ]);
+    }
+
+    DB::beginTransaction();
+    try {
+        $existing = DB::table('reactions')
+            ->where('user_id', $userId)
+            ->where('feed_id', $id)
+            ->where('kind', $reactionKind)
+            ->first();
+
+        if ($existing) {
+            DB::table('reactions')
+                ->where('user_id', $userId)
+                ->where('feed_id', $id)
+                ->where('kind', $reactionKind)
+                ->delete();
+
+            // 0未満防止
+            DB::table('feed_items')
+                ->where('id', $id)
+                ->update([
+                    $counterColumn => DB::raw("GREATEST($counterColumn - 1, 0)")
+                ]);
+
+            $reacted = false;
+        } else {
+            DB::table('reactions')->insert([
+                'user_id'    => $userId,
+                'feed_id'    => $id,
+                'kind'       => $reactionKind,
+                'created_at' => now(),
+            ]);
+
+            DB::table('feed_items')->where('id', $id)->increment($counterColumn, 1);
+
+            $reacted = true;
+        }
+
+        $row = DB::table('feed_items')->where('id', $id)->first();
+        DB::commit();
+
+        return [
+            'ok'       => true,
+            'reacted'  => $reacted,
+            'likes'    => (int)$row->likes,
+            'retweets' => (int)$row->retweets,
+        ];
+    } catch (\Throwable $e) {
+        DB::rollBack();
+        \Log::error('PATCH /feed failed', ['feed_id' => $id, 'error' => $e->getMessage()]);
+        return response()->json(['error' => 'server_error'], 500);
+    }
+});
+
+// タイムライン取得（DBの値をそのまま返す）
+Route::middleware('auth:sanctum')->get('/feed', function () {
+    $viewerId = Auth::id();
+    if (!$viewerId) return response()->json([]);
+
+    $followeeIds = DB::table('follows')
+        ->where('user_id', $viewerId)
+        ->pluck('target_user_id')
+        ->toArray();
+
+    $feedRows = DB::table('feed_items')
+        ->where(function ($q) use ($viewerId, $followeeIds) {
+            $q->where('author_id', $viewerId);
+            if (!empty($followeeIds)) $q->orWhereIn('author_id', $followeeIds);
+        })
+        ->orderBy('created_at', 'desc')
+        ->get();
+
+    $result = $feedRows->map(function ($r) {
+        return [
+            'id'        => $r->id,
+            'kind'      => $r->kind,
+            'data'      => json_decode($r->data, true) ?: [],
+            'createdAt' => $r->created_at,
+            'likes'     => (int)$r->likes,
+            'retweets'  => (int)$r->retweets,
+            'answers'   => (int)$r->answers,
+            'author_id' => (int)$r->author_id,
+        ];
+    });
+
+    return response()->json($result);
+});

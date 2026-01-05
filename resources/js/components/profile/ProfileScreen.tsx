@@ -1,13 +1,11 @@
 // resources/js/components/profile/ProfileScreen.tsx
 import React, { useMemo, useState } from "react";
 import type { QuizPost } from "../../types/quiz";
-import { TagChip } from "../ui/TagChip";
 import {
   CURRENT_USER_ID,
   pickDisplayName,
   getCurrentUserIgnosId,
 } from "../../utils/user";
-import { ActionBar } from "../ui/ActionBar";
 import { QuizPostCard } from "../ui/QuizPostCard";
 
 type ProfileTab = "posts" | "revenge" | "thanks" | "bookmarks";
@@ -23,9 +21,20 @@ export type ProfileScreenProps = {
 
   // ★ 追加：プロフィールから AnswerRunner を開くため
   onStartAnswer: (posts: QuizPost[]) => void;
+
+  // ★ 追加：クイズIDごとの Thanks / Look / Answers 集計値
+  //   例: reactionStats["quiz_id_xyz"] = { likes: 3, retweets: 1, answers: 5 }
+  reactionStats?: Record<
+    string,
+    {
+      likes: number;
+      retweets: number;
+      answers: number;
+    }
+  >;
 };
 
-// 日付表示（ホームと同じ YYYY/MM/DD 形式）
+// 日付表示（必要なら使う用。現状このファイルでは未使用だが残しておいてOK）
 const formatDateYMD = (ts: number) => {
   const d = new Date(ts);
   const y = d.getFullYear();
@@ -43,15 +52,17 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   onToggleFollow,
   onBack,
   onStartAnswer,
+  reactionStats = {}, // ★ デフォルトは空オブジェクト
 }) => {
   const [activeTab, setActiveTab] = useState<ProfileTab>("posts");
   const [menuOpen, setMenuOpen] = useState(false);
-const [markedIds, setMarkedIds] = useState<string[]>([]);
-const toggleLocalMark = (id: string) => {
-  setMarkedIds((prev) =>
-    prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-  );
-};
+  const [markedIds, setMarkedIds] = useState<string[]>([]);
+
+  const toggleLocalMark = (id: string) => {
+    setMarkedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
 
   const isMe = userId === CURRENT_USER_ID;
 
@@ -95,36 +106,45 @@ const toggleLocalMark = (id: string) => {
 
   let body: React.ReactNode;
 
-if (activeTab === "posts") {
-  body = (
-    <div>
-      {myPosts.length === 0 && (
-        <div className="px-4 py-6 text-sm divide-gray-200">
-          まだ投稿がありません。クイズを投稿してみましょう。
-        </div>
-      )}
+  if (activeTab === "posts") {
+    body = (
+      <div>
+        {myPosts.length === 0 && (
+          <div className="px-4 py-6 text-sm divide-gray-200">
+            まだ投稿がありません。クイズを投稿してみましょう。
+          </div>
+        )}
 
-      {myPosts.map((p) => (
-        <div key={p.id} className="px-4">
-          <QuizPostCard
-            post={p}
-            likes={0}
-            retweets={0}
-            answers={0}
-            isMarked={markedIds.includes(p.id)}
-            onAnswer={() => onStartAnswer([p])}
-            onToggleMark={() => toggleLocalMark(p.id)}
-            // プロフィール画面なので編集や Like/RT はとりあえず無し
-            onLike={() => {}}
-            onRT={() => {}}
-            isMine={userId === CURRENT_USER_ID}
-            onOpenProfile={() => {}}
-            onTagClick={() => {}}
-          />
-        </div>
-      ))}
-    </div>
-  );
+        {myPosts.map((p) => {
+          // ★ このクイズIDに対応する Thanks / Look / Answer を取得
+          const stats = reactionStats[p.id] ?? {
+            likes: 0,
+            retweets: 0,
+            answers: 0,
+          };
+
+          return (
+            <div key={p.id} className="px-4">
+              <QuizPostCard
+                post={p}
+                likes={stats.likes}
+                retweets={stats.retweets}
+                answers={stats.answers}
+                isMarked={markedIds.includes(p.id)}
+                onAnswer={() => onStartAnswer([p])}
+                onToggleMark={() => toggleLocalMark(p.id)}
+                // プロフィール画面なので Like/RT アクションはナシ（表示専用）
+                onLike={undefined}
+                onRT={undefined}
+                isMine={userId === CURRENT_USER_ID}
+                onOpenProfile={() => {}}
+                onTagClick={() => {}}
+              />
+            </div>
+          );
+        })}
+      </div>
+    );
   } else if (activeTab === "revenge") {
     body = (
       <div className="px-4 py-6 text-sm divide-gray-200">
